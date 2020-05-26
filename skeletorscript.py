@@ -382,7 +382,8 @@ class SkeletorOperator(bpy.types.Operator):
                 while(len(chainpos.children) ==1  and chainpos.parent is not None):
                     chainlength +=1
                     chainpos = chainpos.parent
-                print ('Adding iktarget to ',piece.name,'chain_length = ',max(1,chainlength))
+                chainlength = max(1,chainlength)
+                print ('Adding iktarget to ',piece.name,'chain_length = ',chainlength)
                 constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
                 constraint.target = armature_object
                 constraint.subtarget = 'iktarget.'+piece.bonename
