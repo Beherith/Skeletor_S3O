@@ -38,6 +38,7 @@ class S3opiece:
         self.ikpole = None
         self.ikpoleangle = 0
         self.isafoot = False
+        self.isAimXY = False
         
     def __repr__(self):
         return ('S3opiece:%s parent = %s children = [%s], offsets = %s object=%s mesh=%s worldpos = %s'%(
@@ -54,7 +55,7 @@ class S3opiece:
     def recurseleftrightbones(self,tag = None):
         
         def nolrname(n):
-            return n.lower.replace("l","_").replace('r','_')
+            return n.lower().replace("l","_").replace('r','_')
         
         if tag is None:
             for i,child in enumerate(self.children):  
@@ -62,19 +63,35 @@ class S3opiece:
                 for k, sibling in enumerate(self.children):
                     if i!=k and nolrname(child.name)==nolrname(sibling.name):
                         isLR = True
-                        if self.worldpos.x>0 : #LEFT
+                        print (self.name, self.worldpos)
+                        if self.worldpos[0]>0 : #LEFT
                             child.recurseleftrightbones(tag = '.L')
                         else:
                             child.recurseleftrightbones(tag = '.R')
                 if not isLR:
-                    child.recuseleftrightbones()
+                    child.recurseleftrightbones()
                         
         else:
             self.bonename = self.name+tag
-            for child in self.children():
+            for child in self.children:
                 child.recurseleftrightbones(tag = tag)
-                
-                
+    
+    def getmeshboundingbox(self):
+        minz = 1000
+        maxz = -1000
+        miny = 1000
+        maxy = -1000
+        minx = 1000
+        maxx = -1000
+        if self.mesh is not None:
+            for vertex in self.mesh.vertices:
+                minz = min(minz,vertex.co[2])
+                maxz = max(maxz,vertex.co[2])
+                miny = min(miny,vertex.co[1])
+                maxy = max(maxy,vertex.co[1])
+                minx = min(minx,vertex.co[0])
+                maxx = max(maxx,vertex.co[0])
+        return (minx,maxx,miny,maxy,minz,maxz)
         
     
 def getmeshbyname(name):
@@ -205,19 +222,29 @@ class SkeletorOperator(bpy.types.Operator):
                 piece.parent = pieces[piece.object.parent.name]
                 piece.parent.children.append(piece)
                 print (piece.name,'->', piece.parent.name)
+        
+        rootpiece.recursefixworldpos(Vector((0,0,0)))
                 
         print ("====ReParenting pieces to avoid AimX and AimY====")
         # if the parent of an object is called aimx* or aimy*, then reparent the piece to the parent of aimx or aimy actual parent
         for piece in pieces.values():
             if piece.object.parent is not None and piece.object.parent.name[0:4].lower() in ['aimx','aimy']:
                 print("Reparenting ",piece.name, "from", piece.parent.name,'to', piece.parent.parent.name)
-                piece.parent = pieces[piece.object.parent.parent.name]
-                piece.parent.parent.children.append(piece)        
-                piece.parent.children.remove(piece)
-        
+                piece.parent.isAimXY = True
+                try:
+                    piece.parent.children.remove(piece)
+
+                    piece.parent = pieces[piece.object.parent.parent.name]
+                    piece.parent.children.append(piece)        
+                except:
+                    print ("piece", piece)
+                    print ("parent", piece.parent)
+                    print ("GP", piece.parent.parent)
+                    
+                    raise
         
         #final check that we have all set:
-        rootpiece.recursefixworldpos(Vector((0,0,0)))
+
         print ("----------Sanity check:-----------")
         for k,v in pieces.items():
             print (k,v)
@@ -257,11 +284,22 @@ class SkeletorOperator(bpy.types.Operator):
         print ("====Looking for mirrorable pieces===")
         #to enable : https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
         
-        rootpiece.recurseleftrightbones()    
-        
+        #rootpiece.recurseleftrightbones()
+        for name, piece in pieces.items():
+            piece.bonename = name
+            for name2, piece2 in pieces.items():
+                if name == name2:
+                    continue
+                if name.lower().replace('l','').replace('r','') == name2.lower().replace('l','').replace('r',''):
+                    if piece.worldpos[0]>0:
+                        piece.bonename = piece.bonename + '.R'
+                    else:
+                        piece.bonename = piece.bonename + '.L'
         print ("====Adding Bones=====")
         
         for name, piece in pieces.items():
+            if piece.isAimXY:
+                continue
             newbone = arm_data.edit_bones.new(piece.bonename)
             newbone.name = piece.bonename
             
@@ -270,38 +308,55 @@ class SkeletorOperator(bpy.types.Operator):
             
             newbone.head = piece.worldpos 
             tailpos =  piece.loc+Vector((0,0,10))
-            if len(piece.children)==1:
-                tailpos = piece.children[0].worldpos
-            elif len(piece.children)>=2:
+            if len(piece.children)>=1:
                 tailpos = Vector((0,0,0))
                 for child in piece.children:
                     tailpos = tailpos + child.worldpos
                 tailpos = tailpos /len(piece.children)
+                newbone.tail = tailpos
+                #TODO: Something is an arm if it has only nomesh children
+                #thus we add a forward pointing IK target to its tailpos
+                onlyemptychildren = True
+                for child in piece.children:
+                    if child.mesh is not None:
+                        onlyemptychildren = False
+                if onlyemptychildren:
+                    print ("looks like an arm:",piece.name)
+                    ikbone = arm_data.edit_bones.new('iktarget.'+piece.bonename)
+                    ikbone.head = newbone.tail
+                    ikbone.tail = newbone.tail + Vector((0,5,2))
+                    piece.iktarget = ikbone  
+
+                
+                
             else: #end piece
                 #TODO: CHECK FOR GEOMETRY, is it a foot or an arm or a tentacle ? 
-                #TODO: Also
                 if piece.mesh is not None:
-                    minz = 100000
-                    miny = 1000000
-                    maxy = -1000000
-                    for vertex in piece.mesh.vertices:
-                        minz = min(minz,vertex.co[2])
-                        miny = min(miny,vertex.co[1])
-                        maxy = max(maxy,vertex.co[1])
-                    if piece.worldpos[2] + minz <= 2.0: 
+                    boundingbox = piece.getmeshboundingbox()
+                    
+                    print ("looks like a foot:", piece.worldpos, piece.name, boundingbox)
+                    if piece.worldpos[2] + boundingbox[2] <= 2.0: 
                         #this looks like a foot
-                        tailpos = piece.worldpos + Vector((0, -miny, minz))
+                        tailpos = piece.worldpos + Vector((0, boundingbox[5], boundingbox[2]))
                         #better add the heel IK thing too XD
                         heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
                         heelbone.head = newbone.head
-                        heelbone.tail = newbone.head - Vector((0,maxy,0))
+                        heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
                         piece.parent.iktarget = heelbone
                     else:
                         #todo this is not a foot
-                        tailpos = piece.worldpos + Vector((0, -miny, minz))
+                        #guess if it points forward or up or down?
+                        if (boundingbox[5] > boundingbox[3] and boundingbox[5]> -1*boundingbox[2]): # points forward
+                            tailpos = piece.worldpos + Vector((0, boundingbox[5], 0))
+                        else:
+                            if (boundingbox[3] > -1*boundingbox[2]):
+                                tailpos = piece.worldpos + Vector((0, 0, boundingbox[3])) #up
+                            else:
+                                tailpos = piece.worldpos + Vector((0, 0, boundingbox[2])) #down
+                                
                     # TODO we are also kind of a foot if we only have children with no meshes.
                 else:
-                    tailpos =  piece.worldpos+Vector((0,-5,0))
+                    tailpos =  piece.worldpos+Vector((0,5,0))
             newbone.tail = tailpos
             print ("trying to add bone to %s\nat head:%s \ntail:%s"%(piece,newbone.head,newbone.tail))
             piece.bone = newbone
@@ -309,7 +364,8 @@ class SkeletorOperator(bpy.types.Operator):
         print ("=====Reparenting Bone-Bones=======")
         
         for name,piece in pieces.items():
-            if piece.parent is not None:
+            
+            if piece.parent is not None and not piece.isAimXY:
                 piece.bone.parent = piece.parent.bone      
   
         bpy.ops.object.editmode_toggle() # i have no idea what im doing
@@ -329,13 +385,14 @@ class SkeletorOperator(bpy.types.Operator):
                 print ('Adding iktarget to ',piece.name,'chain_length = ',chainlength)
                 constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
                 constraint.target = armature_object
-                constraint.subtarget = 'iktarget.'+piece.parent.bonename
+                constraint.subtarget = 'iktarget.'+piece.bonename
                 constraint.chain_count = chainlength
       
         print ("=====Parenting meshes to bones=======")
         #getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
         for name,piece in pieces.items():
-            
+            if piece.isAimXY:
+                continue
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
             ob = piece.object
             bpy.ops.object.select_all(action = 'DESELECT')
@@ -344,7 +401,6 @@ class SkeletorOperator(bpy.types.Operator):
             bpy.ops.object.mode_set(mode='EDIT')
             parent_bone = piece.bonename
             armature_object.data.edit_bones.active = armature_object.data.edit_bones[parent_bone]
-            
             bpy.ops.object.mode_set(mode='OBJECT')
             bpy.ops.object.select_all(action = 'DESELECT')
             ob.select_set(True)
@@ -352,6 +408,7 @@ class SkeletorOperator(bpy.types.Operator):
             bpy.context.view_layer.objects.active = armature_object
             
             bpy.ops.object.parent_set(type = 'BONE', keep_transform = True)
+  
             
         print ("done")  
         
