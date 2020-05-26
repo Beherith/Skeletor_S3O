@@ -337,7 +337,7 @@ class SkeletorOperator(bpy.types.Operator):
                     print ("looks like a foot:", piece.worldpos, piece.name, boundingbox)
                     if piece.worldpos[2] + boundingbox[2] <= 2.0: 
                         #this looks like a foot
-                        tailpos = piece.worldpos + Vector((0, boundingbox[5], boundingbox[2]))
+                        tailpos = piece.worldpos + Vector((0, boundingbox[3], boundingbox[4]))
                         #better add the heel IK thing too XD
                         heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
                         heelbone.head = newbone.head
@@ -382,7 +382,7 @@ class SkeletorOperator(bpy.types.Operator):
                 while(len(chainpos.children) ==1  and chainpos.parent is not None):
                     chainlength +=1
                     chainpos = chainpos.parent
-                print ('Adding iktarget to ',piece.name,'chain_length = ',chainlength)
+                print ('Adding iktarget to ',piece.name,'chain_length = ',max(1,chainlength))
                 constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
                 constraint.target = armature_object
                 constraint.subtarget = 'iktarget.'+piece.bonename
