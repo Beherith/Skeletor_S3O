@@ -92,6 +92,9 @@ class S3opiece:
                 minx = min(minx,vertex.co[0])
                 maxx = max(maxx,vertex.co[0])
         return (minx,maxx,miny,maxy,minz,maxz)
+    
+
+        
         
     
 def getmeshbyname(name):
@@ -224,6 +227,23 @@ class SkeletorOperator(bpy.types.Operator):
                 print (piece.name,'->', piece.parent.name)
         
         rootpiece.recursefixworldpos(Vector((0,0,0)))
+        
+        visited = set() # Set to keep track of visited nodes.
+        opennodes = set()
+        opennodes.add(rootpiece)
+        dfs_piece_order = [rootpiece.name]
+        
+        while(len(opennodes)>0):
+            nodelist = list(opennodes)
+            for node in nodelist:
+                dfs_piece_order.append(node.name)
+                print ('nodename', node.name)
+                opennodes.remove(node)
+                for child in node.children:
+                    opennodes.add(child)
+        print (dfs_piece_order)    
+                
+
                 
         print ("====ReParenting pieces to avoid AimX and AimY====")
         # if the parent of an object is called aimx* or aimy*, then reparent the piece to the parent of aimx or aimy actual parent
@@ -296,8 +316,9 @@ class SkeletorOperator(bpy.types.Operator):
                     else:
                         piece.bonename = piece.bonename + '.L'
         print ("====Adding Bones=====")
-        
-        for name, piece in pieces.items():
+        # NEEDS DEPTH FIRST SEARCH!!!
+        for name in dfs_piece_order:
+            piece = pieces[name]
             if piece.isAimXY:
                 continue
             newbone = arm_data.edit_bones.new(piece.bonename)
@@ -321,7 +342,7 @@ class SkeletorOperator(bpy.types.Operator):
                     if child.mesh is not None:
                         onlyemptychildren = False
                 if onlyemptychildren:
-                    print ("looks like an arm:",piece.name)
+                    print ("LOOKS LIKE AN ARM:",piece.name)
                     ikbone = arm_data.edit_bones.new('iktarget.'+piece.bonename)
                     ikbone.head = newbone.tail
                     ikbone.tail = newbone.tail + Vector((0,5,2))
@@ -331,16 +352,17 @@ class SkeletorOperator(bpy.types.Operator):
                 
             else: #end piece
                 #TODO: CHECK FOR GEOMETRY, is it a foot or an arm or a tentacle ? 
-                if piece.mesh is not None:
+                #TODO: multiple branches for multiple toes give too many IK targets :/
+                if piece.mesh is not None and piece.parent.iktarget is None:
                     boundingbox = piece.getmeshboundingbox()
                     
-                    print ("looks like a foot:", piece.worldpos, piece.name, boundingbox)
-                    if piece.worldpos[2] + boundingbox[2] <= 2.0: 
+                    print ("LOOKS LIKE A FOOT:", piece.name,piece.worldpos,  boundingbox)
+                    if piece.worldpos[2] + boundingbox[4] <= 2.0: 
                         #this looks like a foot
                         tailpos = piece.worldpos + Vector((0, boundingbox[3], boundingbox[4]))
                         #better add the heel IK thing too XD
                         heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
-                        heelbone.head = newbone.head
+                        heelbone.head = piece.parent.bone.tail #newbone.head
                         heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
                         piece.parent.iktarget = heelbone
                     else:
@@ -375,20 +397,24 @@ class SkeletorOperator(bpy.types.Operator):
         print ("=====Setting IK Targets=======")
         
         for name,piece in pieces.items():
+            #break
+            if not piece.isAimXY:
+                armature_object.pose.bones[piece.bonename].rotation_mode = 'ZXY'
+
             if piece.iktarget is not None:
                 
-                chainlength = 0
-                chainpos = piece
+                chainlength = 1
+                chainpos = piece.parent
                 while(len(chainpos.children) ==1  and chainpos.parent is not None):
                     chainlength +=1
                     chainpos = chainpos.parent
-                chainlength = max(1,chainlength)
                 print ('Adding iktarget to ',piece.name,'chain_length = ',chainlength)
                 constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
                 constraint.target = armature_object
                 constraint.subtarget = 'iktarget.'+piece.bonename
                 constraint.chain_count = chainlength
-      
+                armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99 #avoids having to create knee poles
+
         print ("=====Parenting meshes to bones=======")
         #getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
         for name,piece in pieces.items():
