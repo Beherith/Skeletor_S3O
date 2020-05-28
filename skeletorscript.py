@@ -1,7 +1,8 @@
 import bpy
-from math import pi
+from math import pi, degrees
 from mathutils import Vector, Euler, Matrix
 
+piecehierarchy = None
 
 class Skelepanel(bpy.types.Panel):
     bl_label = "Skeletor S30"
@@ -174,14 +175,15 @@ class SkeletorOperator(bpy.types.Operator):
     bl_label = "skeletize"
     bl_description = "Create a skeleton"
     bl_options = {'REGISTER','UNDO'}
-    
+
     def execute(self,context):
-        self.skeletize(context = context)
+        hier = None # piecehierarchy
+        piecehierarchy = self.skeletize(context = context, hier = hier)
         return {'FINISHED'}
         
     @staticmethod
-    def skeletize(context):
-        print ("skeletizing, very happy")
+    def skeletize(context, hier):
+        print ("skeletizing, very happy", hier)
         
         #debug delete all armatures and bones!
         #bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -287,6 +289,9 @@ class SkeletorOperator(bpy.types.Operator):
         armature_object =  bpy.data.objects.new("Armature", arm_data)
         armature_object.location=Vector((0,0,0)) #rootpiece.loc
         armature_object.show_in_front = True
+        armature_object.data.show_axes = True
+        armature_object.data.show_names = True
+
         armature_object.rotation_mode = 'ZXY'
         
         context.collection.objects.link(armature_object)
@@ -303,7 +308,6 @@ class SkeletorOperator(bpy.types.Operator):
         
         print ("====Looking for mirrorable pieces===")
         #to enable : https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
-        
         #rootpiece.recurseleftrightbones()
         for name, piece in pieces.items():
             piece.bonename = name
@@ -317,17 +321,26 @@ class SkeletorOperator(bpy.types.Operator):
                         piece.bonename = piece.bonename + '.L'
         print ("====Adding Bones=====")
         # NEEDS DEPTH FIRST SEARCH!!!
+        
+        
+        NOTAIL = True
         for name in dfs_piece_order:
             piece = pieces[name]
             if piece.isAimXY:
                 continue
-            newbone = arm_data.edit_bones.new(piece.bonename)
+            if piece.bonename in arm_data.edit_bones:
+                newbone = arm_data.edit_bones[piece.bonename]
+            else:
+                newbone = arm_data.edit_bones.new(piece.bonename)
             newbone.name = piece.bonename
             
             #TODO CHANGE TO POSE MODE TO SET THESE!
             #newbone.rotation_mode = 'ZXY'
             
             newbone.head = piece.worldpos 
+            if NOTAIL:
+                newbone.tail = newbone.head + Vector((0,5,0)) 
+            
             tailpos =  piece.loc+Vector((0,0,10))
             if len(piece.children)>=1:
                 tailpos = Vector((0,0,0))
@@ -335,6 +348,8 @@ class SkeletorOperator(bpy.types.Operator):
                     tailpos = tailpos + child.worldpos
                 tailpos = tailpos /len(piece.children)
                 newbone.tail = tailpos
+                if NOTAIL:
+                    newbone.tail = newbone.head + Vector((0,5,0)) #TODO fixeme
                 #TODO: Something is an arm if it has only nomesh children
                 #thus we add a forward pointing IK target to its tailpos
                 onlyemptychildren = True
@@ -364,6 +379,8 @@ class SkeletorOperator(bpy.types.Operator):
                         heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
                         heelbone.head = piece.parent.bone.tail #newbone.head
                         heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
+                        if NOTAIL:
+                            heelbone.tail =  heelbone.head + Vector((0,5,2))
                         piece.parent.iktarget = heelbone
                     else:
                         #todo this is not a foot
@@ -379,7 +396,12 @@ class SkeletorOperator(bpy.types.Operator):
                     # TODO we are also kind of a foot if we only have children with no meshes.
                 else:
                     tailpos =  piece.worldpos+Vector((0,5,0))
-            newbone.tail = tailpos
+            newbone.tail = tailpos 
+            #TODO: easier rotations like this?
+            if NOTAIL:
+                newbone.tail = newbone.head + Vector((0,5,0))
+            
+            
             print ("trying to add bone to %s\nat head:%s \ntail:%s"%(piece,newbone.head,newbone.tail))
             piece.bone = newbone
         #return
@@ -439,16 +461,76 @@ class SkeletorOperator(bpy.types.Operator):
             
         print ("done")  
         
+class SimpleBoneAnglesPanel(bpy.types.Panel):
+    bl_label = "Bone Angles"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+
+    def draw(self, context):
+        if 'Armature' not in context.scene.objects:
+            return
+        arm = context.scene.objects['Armature']
+        
+        props = {"location":"move", "rotation_euler":"turn"} 
+        
+        if arm.animation_data is not None:
+            if arm.animation_data.action is not None:
+                curves = arm.animation_data.action.fcurves;
+                print ("Animdata:",curves, arm.animation_data)
+                for c in curves:
+                    keyframes = c.keyframe_points
+                    i = 0
+                    for k in keyframes:    
+                        print(c.data_path+"<"+str(c.array_index)+"> keyframe "+str(i)+' at <'+str(k.co[0])+','+str(k.co[1])+">")
+                        i+=1
+                            
+                    #print (c.data_path)
+                    #if(not c.data_path in props.keys()):
+                    #    print('skipping curve for property '+c.data_path)
+        for bone in arm.pose.bones:
+            
+            if 'iktarget' in bone.name:
+                continue
+            #row = self.layout.row()
+            #row.label(text = bone.name)
+            bname = bone.name
+
+            mat = bone.matrix.copy()
+            
+            currbone = bone
+            while currbone.parent is not None:
+                
+                pmat = currbone.parent.matrix.copy()
+                pmat.invert()
+                if 'nano' in bname:
+                    print (currbone.name,'->',currbone.parent.name, mat, pmat)
+                mat = mat @ pmat
+                currbone = currbone.parent
+                break
+            
+            
+            rot = mat.to_euler()
+            row = self.layout.row()
+            rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
+            
+            row.label(text=rottext)
+            row = self.layout.row()
+            row.label(text='X%.1f'%(mat[0][3]))
+            row.label(text='Y%.1f'%(mat[1][3]))
+            row.label(text='Z%.1f'%(mat[2][3]))
+
+
 def register():
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
     bpy.utils.register_class(Skelepanel)
+    bpy.utils.register_class(SimpleBoneAnglesPanel)
     
 def unregister():
-    
     bpy.utils.unregister_class(SkeletorOperator)
     bpy.utils.unregister_class(SkeletorRotator)
     bpy.utils.unregister_class(Skelepanel)
+    bpy.utils.unregister_class(SimpleBoneAnglesPanel)
     
 if __name__ == "__main__":
     register()
