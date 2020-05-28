@@ -779,7 +779,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             thisframe = animframes[frameidxs[i]]
             prevframe = animframes[frameidxs[i-1]]
             
-            sleeptime = sleepperframe * interval
+            sleeptime = sleepperframe * (frameidxs[i] - frameidxs[i-1])
             
             if firststep:
                 outf.write("if (bMoving) {\n")
