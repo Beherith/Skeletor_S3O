@@ -1,6 +1,8 @@
 import bpy
 from math import pi, degrees
 from mathutils import Vector, Euler, Matrix
+import os
+import sys
 
 piecehierarchy = None
 
@@ -19,6 +21,9 @@ class Skelepanel(bpy.types.Panel):
 
         row = layout.row()
         row.operator('skele.skeletoroperator',text = '2. Create Skeleton')
+        
+        row = layout.row()
+        row.operator('skele.skeletorbosmaker',text = '3. Create BOS')
         
 class S3opiece:
     def __init__(self, name, object, mesh, xoff,yoff,zoff):
@@ -465,13 +470,117 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
     bl_label = "Bone Angles"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    
+    def __init__(self):
+        super().__init__()
+        print ("SimpleBoneAnglesPanel.init")
+        self.whichframe = 0
 
     def draw(self, context):
         if 'Armature' not in context.scene.objects:
             return
         arm = context.scene.objects['Armature']
-        
+        print ("whichframe",self.whichframe)
+        self.whichframe +=1
         props = {"location":"move", "rotation_euler":"turn"} 
+        
+        
+        #things I know:
+        # curves contain the needed location data
+        # pose bones matrices contain the needed rotation data
+        # ignore all rots and pos's of iktargets
+        # remove .L and .R monikers
+        
+        #required structure:
+        # a dict of keyframes indexed by their frame number
+        animframes = {}
+        #the values of which is another dict, of piece names
+        #each piece name has a turn and a move op, with xzy coords
+        
+        #in each frame, each 'real piece' should have its position and location stored
+        if arm.animation_data is not None:
+            if arm.animation_data.action is not None:
+                curves = arm.animation_data.action.fcurves;
+                print ("Animdata:",curves, arm.animation_data)
+                for c in curves:
+                    keyframes = c.keyframe_points
+                    bname = c.data_path.split('"')[1]
+                    if bname.startswith('iktarget.'):
+                        continue
+                    if bname.endswith('.R') or bname.endswith('.L'):
+                        bname = bname[:-2]
+                    
+                    ctarget = c.data_path.rpartition('.')[2]
+                    if 'quaternion' in ctarget or 'scale' in ctarget:
+                        continue
+                    
+                    axis = str(c.array_index)
+                    
+                    
+                    for i,k in enumerate(keyframes):    
+                        
+                        frameidx = int(k.co[0])
+                        value = float(k.co[1])
+                        if abs(value)<0.1:
+                            continue
+                        
+                        if frameidx not in animframes:
+                            animframes[frameidx] = {}
+                        if bname not in animframes[frameidx]:
+                            animframes[frameidx][bname] = {}
+                            
+                        animframes[frameidx][bname][ctarget+axis] = value
+        
+        print (animframes)
+        return(None)
+        for frametime in sorted(animframes.keys()):
+            print ("SETTING FRAMETIME",frametime)
+            bpy.context.scene.frame_set(frametime)
+            return (None)
+            for bone in arm.pose.bones:
+                
+                if 'iktarget' in bone.name:
+                    continue
+                #row = self.layout.row()
+                #row.label(text = bone.name)
+                bname = bone.name
+
+                mat = bone.matrix.copy()
+                
+                currbone = bone
+                while currbone.parent is not None:
+                    
+                    pmat = currbone.parent.matrix.copy()
+                    pmat.invert()
+                    if 'rflare' in bname:
+                        pass 
+                        #print (currbone.name,'->',currbone.parent.name, mat, pmat)
+                    mat = mat @ pmat
+                    currbone = currbone.parent
+                    break
+                
+                
+                rot = mat.to_euler()
+                row = self.layout.row()
+                rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
+                
+                row.label(text=rottext)
+                row = self.layout.row()
+                row.label(text='X%.1f'%(mat[0][3]))
+                row.label(text='Y%.1f'%(mat[1][3]))
+                row.label(text='Z%.1f'%(mat[2][3]))
+        
+        fps = 30.0
+        startframe = 7
+        interval = 6
+        endframe = 55
+        movethres = 0.5
+        rotthres = 0.5 #degrees
+        
+        #conversion time:
+        #output a bos script
+        #simplify mini rots and mini moves
+
         
         if arm.animation_data is not None:
             if arm.animation_data.action is not None:
@@ -483,6 +592,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
                     for k in keyframes:    
                         print(c.data_path+"<"+str(c.array_index)+"> keyframe "+str(i)+' at <'+str(k.co[0])+','+str(k.co[1])+">")
                         i+=1
+                    break
                             
                     #print (c.data_path)
                     #if(not c.data_path in props.keys()):
@@ -519,16 +629,222 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             row.label(text='Y%.1f'%(mat[1][3]))
             row.label(text='Z%.1f'%(mat[2][3]))
 
+class SkeletorBOSMaker(bpy.types.Operator):
+    bl_idname = "skele.skeletorbosmaker"
+    bl_label = "skeletor_bosmaker"
+    bl_description = "Writes .bos to console"
+    bl_options = {'REGISTER','UNDO'}
+    
+    def execute(self,context):
+        self.tobos(context = context)
+        return {'FINISHED'}
+    
+    def __init__(self):
+        super().__init__()
+        print ("SkeletorBOSMaker.init")
+        self.whichframe = 0
+        
+    #@staticmethod
+    def tobos(self,context):
+        print ("MAKING BOS, BOSS")
+        scene = context.scene
+        if 'Armature' not in context.scene.objects:
+            return
+        arm = context.scene.objects['Armature']
+        print ("whichframe",self.whichframe)
+        self.whichframe +=1
+        props = {"location":"move", "rotation_euler":"turn"} 
+        
+        
+        #things I know:
+        # curves contain the needed location data
+        # pose bones matrices contain the needed rotation data
+        # ignore all rots and pos's of iktargets
+        # remove .L and .R monikers
+        
+        #required structure:
+        # a dict of keyframes indexed by their frame number
+        animframes = {}
+        #the values of which is another dict, of piece names
+        #each piece name has a turn and a move op, with xzy coords
+        
+        #in each frame, each 'real piece' should have its position and location stored
+        if arm.animation_data is not None:
+            if arm.animation_data.action is not None:
+                curves = arm.animation_data.action.fcurves;
+                print ("Animdata:",curves, arm.animation_data)
+                for c in curves:
+                    keyframes = c.keyframe_points
+                    bname = c.data_path.split('"')[1]
+                    if bname.startswith('iktarget.'):
+                        continue
+                    if bname.endswith('.R') or bname.endswith('.L'):
+                        bname = bname[:-2]
+                    
+                    ctarget = c.data_path.rpartition('.')[2]
+                    if 'quaternion' in ctarget or 'scale' in ctarget and 'location' not in ctarget:
+                        continue
+                    
+                    axis = str(c.array_index)
+                    
+                    
+                    for i,k in enumerate(keyframes):    
+                        
+                        frameidx = int(k.co[0])
+                        value = float(k.co[1])
+                        #if abs(value)<0.1:
+                        #    continue
+                        
+                        if frameidx not in animframes:
+                            animframes[frameidx] = {}
+                        if bname not in animframes[frameidx]:
+                            animframes[frameidx][bname] = {}
+                            
+                        animframes[frameidx][bname][ctarget+axis] = value
+        
+        print (animframes)
+        #return(None)
+        for frameidx in sorted(animframes.keys()):
+            print ("SETTING FRAMETIME",frameidx)
+            bpy.context.scene.frame_set(frameidx)
+            #return (None)
+            for bone in arm.pose.bones:
+                
+                if 'iktarget' in bone.name:
+                    continue
+                #row = self.layout.row()
+                #row.label(text = bone.name)
+                bname = bone.name
+                if bname.endswith('.R') or bname.endswith('.L'):
+                    bname = bname[:-2]
+                mat = bone.matrix.copy()
+                
+                currbone = bone
+                while currbone.parent is not None:
+                    
+                    pmat = currbone.parent.matrix.copy()
+                    pmat.invert()
+                    if 'lfoot' in bname:
+                        pass 
+                        #print (currbone.name,'->',currbone.parent.name, mat, pmat)
+                    mat = mat @ pmat
+                    currbone = currbone.parent
+                    break
+                
+                
+                rot = mat.to_euler()
+                rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
+                print (rottext)
+                
+                for axis,value  in enumerate(rot[0:3]):                        
+                    #if abs(value)<0.1:
+                    #    continue
+                    
+                    if frameidx not in animframes:
+                        animframes[frameidx] = {}
+                    if bname not in animframes[frameidx]:
+                        animframes[frameidx][bname] = {}
+                    print ('adding',frameidx,bname,'rot'+str(axis),value)
+                    animframes[frameidx][bname]['rot'+str(axis)] = degrees(value)
+                    
+        print (animframes,"FUCK")        
+        print ("WHAT")
+        fps = 30.0
+        startframe = 7
+        interval = 6
+        endframe = 55
+        movethres = 0.5
+        rotthres = 0.5 #degrees
+        sleepperframe = 0.032999
+        #conversion time:
+        #output a bos script
+        #simplify mini rots and mini moves
+        #the first frame can be ignored
+        frameidxs = sorted(animframes.keys())
+       
+        filepath = bpy.data.filepath
+        directory = os.path.dirname(filepath)
+        print(directory)
+        AXES = 'XZY'
+        BOSAXIS = ['x-axis','z-axis','y-axis']
+        newfile_name = os.path.join( directory , "bos_export.txt")
+        outf = open(newfile_name,'w')
+        
+        firststep = True
+        for i, frameidx in enumerate(frameidxs):
+
+            if frameidx == 1:
+                continue
+            
+            thisframe = animframes[frameidxs[i]]
+            prevframe = animframes[frameidxs[i-1]]
+            
+            sleeptime = sleepperframe * interval
+            
+            if firststep:
+                outf.write("if (bMoving) {\n")
+            else:
+                outf.write("if (bMoving) {\n")
+                
+            for bname in sorted(thisframe.keys()):
+                motions = thisframe[bname]
+                for axis, value in motions.items():
+                    if bname in prevframe and axis in prevframe[bname]:
+                        prevvalue = prevframe[bname][axis]
+                        axidx = AXES[int(axis[-1])]
+                        ax = int(axis[-1])
+                        axmul = [-1.0,1.0,1.0]
+                        if abs(value-prevvalue)<0.1:
+                            continue
+                        else:
+                            if axis.startswith('location'):
+                                
+                                BOS = '\t\tmove %s to %s [%.6f] speed [%.6f];\n'%(
+                                    bname,
+                                    BOSAXIS[int(axis[-1])],
+                                    value * axmul[ax],
+                                    abs(value-prevvalue) /sleeptime
+                                )
+                                outf.write(BOS)
+                            
+                            if axis.startswith('rot') and 'euler' not in axis:
+                                
+                                BOS = '\t\tturn %s to %s <%.6f> speed <%.6f>;\n'%(
+                                    bname,
+                                    BOSAXIS[int(axis[-1])],
+                                    value * axmul[ax],
+                                    abs(value-prevvalue) /sleeptime
+                                )
+                                outf.write(BOS)
+                                                    
+                    else:
+                        print (i, "Cant find previous value for",bname,axis)
+            
+            outf.write('\tsleep %i;\n'%(1000*sleeptime))
+            
+        
+            if firststep:
+                outf.write("}\n")
+                outf.write("while(bMoving){\n")
+                firststep = False
+            else:
+                outf.write('}\n')
+                        
+
+        outf.write('}\n')
+        outf.close()
 
 def register():
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
+    bpy.utils.register_class(SkeletorBOSMaker)
     bpy.utils.register_class(Skelepanel)
     bpy.utils.register_class(SimpleBoneAnglesPanel)
     
 def unregister():
     bpy.utils.unregister_class(SkeletorOperator)
     bpy.utils.unregister_class(SkeletorRotator)
+    bpy.utils.unregister_class(SkeletorBOSMaker)
     bpy.utils.unregister_class(Skelepanel)
     bpy.utils.unregister_class(SimpleBoneAnglesPanel)
     
