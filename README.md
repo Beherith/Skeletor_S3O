@@ -1,3 +1,6 @@
+# Usage Guide:
+https://docs.google.com/document/d/1-oMLkWHBhfN6a3a5aEZU6X02lY4aZE52nZRtrvIe4cM/edit?usp=sharing
+
 # Skeletor_S3O
 A blender script that automatically generates a skeleton for an s3o imported model for SpringRTS animation
 
