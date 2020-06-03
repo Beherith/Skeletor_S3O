@@ -593,6 +593,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
         boneswithcurves = []
         bonesinIKchains = []
         
+        ISWALK = True
+        VARIABLESPEED = True
         #things I know:
         # curves contain the needed location data
         # pose bones matrices contain the needed rotation data
@@ -723,8 +725,13 @@ class SkeletorBOSMaker(bpy.types.Operator):
         newfile_name = filepath + ".bos_export.txt"
         outf = open(newfile_name,'w')
         outf.write("// Generated for %s\n// Using https://github.com/Beherith/Skeletor_S3O \n"%filepath)
-        outf.write("// this animation uses the static-var animSpeed which contains how many frames each keyframe takes\n")
-        outf.write("static-var animSpeed;\n")
+        outf.write("// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
+        if ISWALK and VARIABLESPEED:
+            outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, bMoving;\n")
+            
+        else:
+            outf.write("static-var bAnimate;\n")
+            
 
         animSpeed = [frame_indexes[i] - frame_indexes[i-1] for i in range(2,len(frame_indexes))]
         animFPK = 4
@@ -733,15 +740,21 @@ class SkeletorBOSMaker(bpy.types.Operator):
             return
         else:
             animFPK = float(sum(animSpeed))/(len(frame_indexes)-2)
-            if (animFPK- round(animFPK) > 0.00001):
+            if ISWALK and (animFPK- round(animFPK) > 0.00001):
                 warn = "//Animframes spacing is %f, THIS SHOULD BE AN INTEGER, SPACE YOUR KEYFRAMES EVENLY!\n"%animFPK
                 outf.write(warn)
                 print(warn)
             
-        stopwalking_maxspeed = {} #dict of of bos commands, with max velocity in it to define the stopwalking func
-        outf.write("Walk() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
+        stopwalking_maxspeed = {} #dict of of bos commands, with max velocity in it to define the stopwalking function
+        if ISWALK:
+            outf.write("Walk() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
+        else:
+            outf.write("Animate() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
         
         firststep = True
+        if not ISWALK:
+            firststep = False
+            
         for i, frameidx in enumerate(frame_indexes):
             if i == 0: #skip first piece
                 continue
@@ -755,7 +768,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
             if firststep:
                 outf.write("\tif (bMoving) {\n")
             else:
-                outf.write("\t\tif (bMoving) {\n")
+                if ISWALK:
+                    outf.write("\t\tif (bMoving) {\n")
+                else:
+                    outf.write("\t\tif (bAnimate) {\n")
                 
             for bname in sorted(thisframe.keys()):
                 motions = thisframe[bname]
@@ -781,11 +797,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     else:
                         
                         stopwalking_cmd = 'turn %s to %s'
-                        boscmd =  '\t\t\tturn %s to %s <%.6f> speed <%.6f>; '
+                        boscmd =  '\t\t\tturn %s to %s <%.6f> speed <%.6f> %s; '
                         if axis.startswith('location'):
                             
                             axmul = [1.0,1.0,1.0]
-                            boscmd =  '\t\t\tmove %s to %s [%.6f] speed [%.6f]; '
+                            boscmd =  '\t\t\tmove %s to %s [%.6f] speed [%.6f] %s; '
                             stopwalking_cmd = 'move %s to %s'
                         
                         stopwalking_cmd = stopwalking_cmd % (bname,BOSAXIS[ax])
@@ -796,12 +812,26 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         else:
                             stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
                         rotations_sum += abs(value-prevvalue)
-                        BOS = boscmd %(
-                                bname,
-                                BOSAXIS[ax],
-                                value * axmul[ax],
-                                abs(value-prevvalue) /sleeptime
-                        )
+                        
+                        #  '\t\t\tmove %s to %s [%.6f] speed [%.6f]; '
+                        
+                        if VARIABLESPEED:
+                            BOS = boscmd %(
+                                    bname,
+                                    BOSAXIS[ax],
+                                    value * axmul[ax],
+                                    abs(value-prevvalue)*fps,
+                                    '/ animSpeed'
+                                    
+                            )
+                        else:      
+                            BOS = boscmd %(
+                                    bname,
+                                    BOSAXIS[ax],
+                                    value * axmul[ax],
+                                    abs(value-prevvalue) /sleeptime,
+                                    ''
+                            )
                         if rotations_sum > 130:
                             gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s"%(frameidx, bname)
                             print (gwarn)        
@@ -809,8 +839,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         if not foundprev:
                             BOS += '//' + "Failed to find previous position for bone"+bname+'axis'+axis
                         outf.write(BOS+'\n')
-
-            outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
+                        
+            if firststep or not VARIABLESPEED:
+                outf.write('\t\tsleep %i;\n'%(33*framedelta -1))
+            else:
+                outf.write('\t\tsleep ((33*animSpeed) -1);\n')
 
             if firststep:
                 outf.write("\t}\n")
@@ -822,8 +855,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf.write('\t}\n')
 
         outf.write('}\n')
-        
-        outf.write('// Call this from MotionControl()!\nStopWalking() {\n')
+        if ISWALK:
+            outf.write('// Call this from MotionControl()!\nStopWalking() {\n')
+        else:
+            outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
         for restore in sorted(stopwalking_maxspeed.keys()):
             if restore.startswith('turn'):
                 outf.write('\t'+restore+ ' <0> speed <%.6f>;\n'%stopwalking_maxspeed[restore])
@@ -831,18 +866,20 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 outf.write('\t'+restore+ ' [0] speed [%.6f];\n'%stopwalking_maxspeed[restore])
         outf.write('}\n')
         
-        '''UnitSpeed()
-            {     
-                moveSpeed = get MAX_SPEED; // this returns cob units per frame i think
-                //we need to calc the frames per keyframe value, from the known anim
-                while(TRUE)
-                {
-                    currentSpeed = (get CURRENT_SPEED)*20/moveSpeed;
-                    if (currentSpeed<4) currentSpeed=4;
-                    animSpeed = 1250 / currentSpeed;
-                    sleep 142;
-                }
-            }'''
+        if ISWALK and VARIABLESPEED:
+            outf.write('UnitSpeed(){\n')
+            outf.write(' maxSpeed = get MAX_SPEED; // this returns cob units per frame i think\n')
+            outf.write(' animFramesPerKeyframe = %i; //we need to calc the frames per keyframe value, from the known animtime\n'%animFPK)
+            outf.write(' maxSpeed = maxSpeed + (maxSpeed /(2*animFramesPerKeyframe)); // add fudge\n')
+            outf.write(' while(TRUE){\n')
+            outf.write('  animSpeed = (get CURRENT_SPEED);\n')
+            outf.write('  if (animSpeed<1) animSpeed=1;\n')
+            outf.write('  animSpeed = (maxSpeed * %i) / (get CURRENT_SPEED); \n' % animFPK)
+            outf.write('  //get PRINT(maxSpeed, animFramesPerKeyframe, animSpeed);\n')
+            outf.write('  if (animSpeed<%i) animSpeed=%i;\n' %(int(animFPK/2), int(animFPK/2)))
+            outf.write('  if (animspeed>%i) animSpeed = %i;\n'%(animFPK*2, animFPK*2))
+            outf.write('  sleep %i;\n'%(33*animFPK -1))
+            outf.write(' }\n}\n')
         
         outf.close()
         print ("Done writing bos!")
