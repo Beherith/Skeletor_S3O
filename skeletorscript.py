@@ -16,7 +16,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 0),
+    "version": (0, 1, 1),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -534,6 +534,9 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #print (rottext)
             if bname in selectednames:
                 rottext = '  '+rottext.upper()
+            if sum([abs(degrees(rot.x)),abs(degrees(rot.y)),abs(degrees(rot.z))])> 135:
+                rottext = '[!] '+rottext
+                row.alert = True
             row.label(text=rottext)
             #row = self.layout.row()
             #row.label(text='X%.1f'%(mat[0][3]))
@@ -690,7 +693,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 print(warn)
             
         stopwalking_maxspeed = {} #dict of of bos commands, with max velocity in it to define the stopwalking func
-        outf.write("Walk() {\n")
+        outf.write("Walk() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
         
         firststep = True
         for i, frameidx in enumerate(frameidxs):
@@ -712,6 +715,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 
             for bname in sorted(thisframe.keys()):
                 motions = thisframe[bname]
+                rotsum = 0
                 for axis, value in motions.items():
                     #find previous value
                     prevvalue = 0
@@ -728,7 +732,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     ax = int(axis[-1])
                     axmul = [-1.0,-1.0,1.0]
                     if abs(value-prevvalue)<0.1: 
-                        print ("Ignored %s %s of %.6f delta"%(bname,axis,value-prevvalue))
+                        #print ("Ignored %s %s of %.6f delta"%(bname,axis,value-prevvalue))
                         continue
                     else:
                         
@@ -747,14 +751,18 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                 stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
                         else:
                             stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
+                        rotsum += abs(value-prevvalue)
                         BOS = boscmd %(
                                 bname,
                                 BOSAXIS[ax],
                                 value * axmul[ax],
                                 abs(value-prevvalue) /sleeptime
                         )
+                        if rotsum > 130:
+                            gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s"%(frameidx, bname)
+                            print (gwarn)        
+                            BOS += '//'+gwarn+'\n'
                         outf.write(BOS)     
-                           
    
             
             if firststep:
