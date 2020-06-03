@@ -26,7 +26,6 @@ bl_info = {
     "support": "COMMUNITY",
     "category": "Rigging",
 }
-
 import bpy
 from math import pi, degrees
 from mathutils import Vector, Euler, Matrix
@@ -501,13 +500,16 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
     bl_region_type = 'UI'
 
     def draw(self, context):
+        #print ("DrawSimpleBonesAnglesPanel")
         if 'Armature' not in context.scene.objects:
             return
         arm = context.scene.objects['Armature']
-        self.whichframe +=1
         props = {"location":"move", "rotation_euler":"turn"} 
         
-
+        selectednames = []
+        for o in bpy.context.selected_pose_bones:
+            selectednames.append(o.name)
+        print (selectednames)
         for bone in arm.pose.bones:
             
             if 'iktarget' in bone.name:
@@ -526,15 +528,17 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
                 currbone = currbone.parent
   
             
-            rot = mat.to_euler()
+            rot = mat.to_euler('ZXY')
             row = self.layout.row()
             rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
-            
+            #print (rottext)
+            if bname in selectednames:
+                rottext = '  '+rottext.upper()
             row.label(text=rottext)
-            row = self.layout.row()
-            row.label(text='X%.1f'%(mat[0][3]))
-            row.label(text='Y%.1f'%(mat[1][3]))
-            row.label(text='Z%.1f'%(mat[2][3]))
+            #row = self.layout.row()
+            #row.label(text='X%.1f'%(mat[0][3]))
+            #row.label(text='Y%.1f'%(mat[1][3]))
+            #row.label(text='Z%.1f'%(mat[2][3]))
 
 class SkeletorBOSMaker(bpy.types.Operator):
     bl_idname = "skele.skeletorbosmaker"
@@ -637,7 +641,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     currbone = currbone.parent
  
                 
-                rot = mat.to_euler()
+                rot = mat.to_euler('ZXY')
                 rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
                 print (rottext)
                 
@@ -668,7 +672,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print(directory,filepath)
         AXES = 'XZY'
         BOSAXIS = ['x-axis','z-axis','y-axis']
-        newfile_name = os.path.join( directory , "bos_export.txt")
+        newfile_name = filepath + ".bos_export.txt"
         outf = open(newfile_name,'w')
         outf.write("// Generated for %s\n// Using https://github.com/Beherith/Skeletor_S3O \n"%filepath)
         outf.write("// this animation uses the static-var animSpeed which contains how many frames each keyframe takes\n")
@@ -722,7 +726,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
   
                     axidx = AXES[int(axis[-1])]
                     ax = int(axis[-1])
-                    axmul = [-1.0,1.0,1.0]
+                    axmul = [-1.0,-1.0,1.0]
                     if abs(value-prevvalue)<0.1: 
                         print ("Ignored %s %s of %.6f delta"%(bname,axis,value-prevvalue))
                         continue
@@ -731,6 +735,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         stopwalking_cmd = 'turn %s to %s'
                         boscmd =  '\t\t\tturn %s to %s <%.6f> speed <%.6f>;\n'
                         if axis.startswith('location'):
+                            
+                            axmul = [1.0,1.0,1.0]
                             boscmd =  '\t\t\tmove %s to %s [%.6f] speed [%.6f];\n'
                             stopwalking_cmd = 'move %s to %s'
                         
