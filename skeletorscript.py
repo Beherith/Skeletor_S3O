@@ -1,4 +1,3 @@
-
 #!BPY
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +19,7 @@ bl_info = {
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
-    "warning": "",
+    "warning": "I have no idea what im doing",
     "wiki_url": "https://github.com/Beherith/Skeletor_S3O",
     "tracker_url": "http://springrts.com",
     "support": "COMMUNITY",
@@ -32,7 +31,29 @@ from mathutils import Vector, Euler, Matrix
 import os
 import sys
 
+from bpy.props import (StringProperty,
+                       BoolProperty,
+                       IntProperty,
+                       FloatProperty,
+                       FloatVectorProperty,
+                       EnumProperty,
+                       PointerProperty,
+                       )
+from bpy.types import (Panel,
+                       Operator,
+                       AddonPreferences,
+                       PropertyGroup,
+                       )
+
 piecehierarchy = None
+
+class MySettings(PropertyGroup):
+
+    my_bool : BoolProperty(
+        name="Enable or Disable",
+        description="A bool property",
+        default = True
+        )
 
 class Skelepanel(bpy.types.Panel):
     bl_label = "Skeletor S30"
@@ -43,13 +64,16 @@ class Skelepanel(bpy.types.Panel):
     
     def draw(self,context):
         layout = self.layout
+        
+        scene = context.scene
+        mytool = scene.my_tool
 
         row = layout.row()
         row.operator("skele.skeletorrotator",text = '1. Correctly rotate S3O')
 
         row = layout.row()
         row.operator('skele.skeletoroperator',text = '2. Create Skeleton')
-        
+        layout.prop(mytool, "my_bool", text="Walk Script")
         row = layout.row()
         row.operator('skele.skeletorbosmaker',text = '3. Create BOS')
         
@@ -126,10 +150,6 @@ class S3opiece:
                 minx = min(minx,vertex.co[0])
                 maxx = max(maxx,vertex.co[0])
         return (minx,maxx,miny,maxy,minz,maxz)
-    
-
-        
-        
     
 def getmeshbyname(name):
     for mesh in bpy.data.meshes:
@@ -210,14 +230,14 @@ class SkeletorOperator(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
 
     def execute(self,context):
-        hier = None # piecehierarchy
-        piecehierarchy = self.skeletize(context = context, hier = hier)
+        piecehierarchy = self.skeletize(context = context)
         return {'FINISHED'}
         
     @staticmethod
-    def skeletize(context, hier):
-        print ("skeletizing, very happy", hier)
-        
+    def skeletize(context):
+        print ("skeletizing, very happy")
+        NOTAIL = True
+
         #debug delete all armatures and bones!
         #bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -262,9 +282,8 @@ class SkeletorOperator(bpy.types.Operator):
                 print (piece.name,'->', piece.parent.name)
         
         rootpiece.recursefixworldpos(Vector((0,0,0)))
-        
-        visited = set() # Set to keep track of visited nodes.
-        opennodes = set()
+
+        opennodes = set() # Set to keep track of visited nodes.
         opennodes.add(rootpiece)
         dfs_piece_order = [rootpiece.name]
         
@@ -277,10 +296,8 @@ class SkeletorOperator(bpy.types.Operator):
                 for child in node.children:
                     opennodes.add(child)
         print (dfs_piece_order)    
-                
 
-                
-        print ("====ReParenting pieces to avoid AimX and AimY====")
+        print ("====Reparenting pieces to avoid AimX and AimY====")
         # if the parent of an object is called aimx* or aimy*, then reparent the piece to the parent of aimx or aimy actual parent
         for piece in pieces.values():
             if piece.object.parent is not None and piece.object.parent.name[0:4].lower() in ['aimx','aimy']:
@@ -288,18 +305,16 @@ class SkeletorOperator(bpy.types.Operator):
                 piece.parent.isAimXY = True
                 try:
                     piece.parent.children.remove(piece)
-
                     piece.parent = pieces[piece.object.parent.parent.name]
-                    piece.parent.children.append(piece)        
+                    piece.parent.children.append(piece)
+
                 except:
                     print ("piece", piece)
                     print ("parent", piece.parent)
                     print ("GP", piece.parent.parent)
-                    
                     raise
-        
-        #final check that we have all set:
 
+        #final check that we have all set:
         print ("----------Sanity check:-----------")
         for k,v in pieces.items():
             print (k,v)
@@ -314,8 +329,6 @@ class SkeletorOperator(bpy.types.Operator):
             obj.rotation_mode = 'ZXY'
         
         #add an armature!
-        
-        
         print ("====Creating Armature====")
         arm_data = bpy.data.armatures.new("Armature")
         
@@ -335,8 +348,6 @@ class SkeletorOperator(bpy.types.Operator):
         
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-        
-        
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         
         print ("====Looking for mirrorable pieces===")
@@ -352,11 +363,8 @@ class SkeletorOperator(bpy.types.Operator):
                         piece.bonename = piece.bonename + '.R'
                     else:
                         piece.bonename = piece.bonename + '.L'
+
         print ("====Adding Bones=====")
-        # NEEDS DEPTH FIRST SEARCH!!!
-        
-        
-        NOTAIL = True
         for name in dfs_piece_order:
             piece = pieces[name]
             if piece.isAimXY:
@@ -394,9 +402,7 @@ class SkeletorOperator(bpy.types.Operator):
                     ikbone = arm_data.edit_bones.new('iktarget.'+piece.bonename)
                     ikbone.head = newbone.tail
                     ikbone.tail = newbone.tail + Vector((0,5,2))
-                    piece.iktarget = ikbone  
-
-                
+                    piece.iktarget = ikbone   
                 
             else: #end piece
                 #TODO: CHECK FOR GEOMETRY, is it a foot or an arm or a tentacle ? 
@@ -447,17 +453,14 @@ class SkeletorOperator(bpy.types.Operator):
   
         bpy.ops.object.editmode_toggle() # i have no idea what im doing
         bpy.ops.object.posemode_toggle()
-        
-        
+
         print ("=====Setting IK Targets=======")
         
         for name,piece in pieces.items():
-            #break
             if not piece.isAimXY:
                 armature_object.pose.bones[piece.bonename].rotation_mode = 'ZXY'
 
             if piece.iktarget is not None:
-                
                 chainlength = 1
                 chainpos = piece.parent
                 while(len(chainpos.children) ==1  and chainpos.parent is not None):
@@ -488,9 +491,7 @@ class SkeletorOperator(bpy.types.Operator):
             ob.select_set(True)
             armature_object.select_set(True)
             bpy.context.view_layer.objects.active = armature_object
-            
             bpy.ops.object.parent_set(type = 'BONE', keep_transform = True)
-  
             
         print ("done")  
         
@@ -518,7 +519,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #row = self.layout.row()
             #row.label(text = bone.name)
             bname = bone.name
-            MYEULER = 'YXZ' #'ZXY'
+            MYEULER = 'YXZ' #'ZXY' #BECAUSE FUCK ME THATS WHY
             mat = bone.matrix.copy()
             
             pmat = bone.matrix.copy()
@@ -528,6 +529,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
                 pmat.invert()
                 mat = mat @ pmat
                 currbone = currbone.parent
+
             #there seems to be a major difference in IK based rots, and manual rots. 
             #the matrix inversion with 'YXZ' euler order seems to be correct for IK targetted bones
             #but its way overkill for manually rotated stuff
@@ -539,10 +541,8 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #use the locs  and rots from the fcurves, and then in pass 2 merge on the actual ones?
             #We KNOW which bones have FK fcurves - those are the ones manually set
             #We can also fiogure out, from the IK constraints and the chain lengths, which bones have IK on them
-                #bpy.context.object.pose.bones["rankle.R"].constraints["IK"].mute = False
+            #bpy.context.object.pose.bones["rankle.R"].constraints["IK"].mute = False
 
-            
-            
             rot = mat.to_euler(MYEULER)#, pmat.to_euler(MYEULER) )
             
             row = self.layout.row()
@@ -626,8 +626,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         continue
                     
                     axis = str(c.array_index)
-                    
-                    
+
                     for i,k in enumerate(keyframes):    
                         
                         frameidx = int(k.co[0])
@@ -643,7 +642,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         animframes[frameidx][bname][ctarget+axis] = value
         
         print (animframes)
-        #return(None)
+
         for frameidx in sorted(animframes.keys()):
             print ("SETTING FRAMETIME",frameidx)
             bpy.context.scene.frame_set(frameidx)
@@ -671,7 +670,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     bname = bname[:-2]
                 mat = bone.matrix.copy()
                 
-                MYEULER = 'YXZ' #'ZXY'
+                MYEULER = 'YXZ' #'ZXY' #LORD HAVE MERCY
                 currbone = bone
                 pmat = bone.matrix.copy()
                 if currbone.parent is not None:  
@@ -680,7 +679,6 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
                     mat = mat @ pmat
                     currbone = currbone.parent
- 
                 
                 rot = mat.to_euler(MYEULER, pmat.to_euler(MYEULER) )
                 rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
@@ -715,7 +713,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         #output a bos script
         #simplify mini rots and mini moves
         #the first frame can be ignored
-        frameidxs = sorted(animframes.keys())
+        frame_indexes = sorted(animframes.keys())
        
         filepath = bpy.data.filepath
         directory = os.path.dirname(filepath)
@@ -726,14 +724,15 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf = open(newfile_name,'w')
         outf.write("// Generated for %s\n// Using https://github.com/Beherith/Skeletor_S3O \n"%filepath)
         outf.write("// this animation uses the static-var animSpeed which contains how many frames each keyframe takes\n")
-        
-        animSpeed = [frameidxs[i] - frameidxs[i-1] for i in range(2,len(frameidxs))]
+        outf.write("static-var animSpeed;\n")
+
+        animSpeed = [frame_indexes[i] - frame_indexes[i-1] for i in range(2,len(frame_indexes))]
         animFPK = 4
         if len(animSpeed) == 0:
-            print ("SUPER WARNING, NO DETECTABLE FRAMES!")
+            print ("MEGA WARNING: NO DETECTABLE FRAMES!")
             return
         else:
-            animFPK = float(sum(animSpeed))/(len(frameidxs)-2)
+            animFPK = float(sum(animSpeed))/(len(frame_indexes)-2)
             if (animFPK- round(animFPK) > 0.00001):
                 warn = "//Animframes spacing is %f, THIS SHOULD BE AN INTEGER, SPACE YOUR KEYFRAMES EVENLY!\n"%animFPK
                 outf.write(warn)
@@ -743,19 +742,16 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf.write("Walk() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
         
         firststep = True
-        for i, frameidx in enumerate(frameidxs):
-
-            if i == 0:
+        for i, frameidx in enumerate(frame_indexes):
+            if i == 0: #skip first piece
                 continue
             
-            thisframe = animframes[frameidxs[i]]
-            prevframe = animframes[frameidxs[i-1]]
+            thisframe = animframes[frame_indexes[i]]
+            prevframe = animframes[frame_indexes[i-1]]
             
-            sleeptime = sleepperframe * (frameidxs[i] - frameidxs[i-1])
-            framedelta = frameidxs[i] - frameidxs[i-1]
-            
-            
-            
+            framedelta = frame_indexes[i] - frame_indexes[i-1]
+            sleeptime = sleepperframe * framedelta
+
             if firststep:
                 outf.write("\tif (bMoving) {\n")
             else:
@@ -763,14 +759,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 
             for bname in sorted(thisframe.keys()):
                 motions = thisframe[bname]
-                rotsum = 0
+                rotations_sum = 0
                 for axis, value in motions.items():
                     #find previous value
                     prevvalue = 0
                     foundprev = False
-                    for p in range(i-1,-1,-1):
-                        if bname in animframes[frameidxs[p]] and axis in animframes[frameidxs[p]][bname]:
-                            prevvalue = animframes[frameidxs[p]][bname][axis]
+                    for previous in range(i-1,-1,-1):
+                        if bname in animframes[frame_indexes[previous]] and axis in animframes[frame_indexes[previous]][bname]:
+                            prevvalue = animframes[frame_indexes[previous]][bname][axis]
                             foundprev = True
                             break
                     if not foundprev:
@@ -785,11 +781,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     else:
                         
                         stopwalking_cmd = 'turn %s to %s'
-                        boscmd =  '\t\t\tturn %s to %s <%.6f> speed <%.6f>;\n'
+                        boscmd =  '\t\t\tturn %s to %s <%.6f> speed <%.6f>; '
                         if axis.startswith('location'):
                             
                             axmul = [1.0,1.0,1.0]
-                            boscmd =  '\t\t\tmove %s to %s [%.6f] speed [%.6f];\n'
+                            boscmd =  '\t\t\tmove %s to %s [%.6f] speed [%.6f]; '
                             stopwalking_cmd = 'move %s to %s'
                         
                         stopwalking_cmd = stopwalking_cmd % (bname,BOSAXIS[ax])
@@ -799,26 +795,23 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                 stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
                         else:
                             stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
-                        rotsum += abs(value-prevvalue)
+                        rotations_sum += abs(value-prevvalue)
                         BOS = boscmd %(
                                 bname,
                                 BOSAXIS[ax],
                                 value * axmul[ax],
                                 abs(value-prevvalue) /sleeptime
                         )
-                        if rotsum > 130:
+                        if rotations_sum > 130:
                             gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s"%(frameidx, bname)
                             print (gwarn)        
                             BOS += '//'+gwarn+'\n'
-                        outf.write(BOS)     
-   
-            
-            if firststep:
-                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
-            else:
-                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
-            
-        
+                        if not foundprev:
+                            BOS += '//' + "Failed to find previous position for bone"+bname+'axis'+axis
+                        outf.write(BOS+'\n')
+
+            outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
+
             if firststep:
                 outf.write("\t}\n")
                 outf.write("\twhile(bMoving) {\n")
@@ -838,7 +831,6 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 outf.write('\t'+restore+ ' [0] speed [%.6f];\n'%stopwalking_maxspeed[restore])
         outf.write('}\n')
         
-        
         '''UnitSpeed()
             {     
                 moveSpeed = get MAX_SPEED; // this returns cob units per frame i think
@@ -854,10 +846,13 @@ class SkeletorBOSMaker(bpy.types.Operator):
         
         outf.close()
         print ("Done writing bos!")
-        print (bonesinIKchains)
-        print (boneswithcurves)
+        print ("bonesinIKchains:",bonesinIKchains)
+        print ("boneswithcurves:",boneswithcurves)
+
 
 def register():
+    bpy.utils.register_class(MySettings)
+    bpy.types.Scene.my_tool = PointerProperty(type=MySettings)
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
     bpy.utils.register_class(SkeletorBOSMaker)
@@ -866,10 +861,12 @@ def register():
     
 def unregister():
     bpy.utils.unregister_class(SkeletorOperator)
+    bpy.utils.unregister_class(MySettings)
     bpy.utils.unregister_class(SkeletorRotator)
     bpy.utils.unregister_class(SkeletorBOSMaker)
     bpy.utils.unregister_class(Skelepanel)
     bpy.utils.unregister_class(SimpleBoneAnglesPanel)
+    del bpy.types.Scene.my_tool
     
 if __name__ == "__main__":
     register()
