@@ -16,7 +16,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 1),
+    "version": (0, 1, 2),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -507,9 +507,10 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
         props = {"location":"move", "rotation_euler":"turn"} 
         
         selectednames = []
-        for o in bpy.context.selected_pose_bones:
-            selectednames.append(o.name)
-        print (selectednames)
+        if bpy.context.selected_pose_bones is not None:
+            for o in bpy.context.selected_pose_bones:
+                selectednames.append(o.name)
+        #print (selectednames)
         for bone in arm.pose.bones:
             
             if 'iktarget' in bone.name:
@@ -517,18 +518,33 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #row = self.layout.row()
             #row.label(text = bone.name)
             bname = bone.name
-
+            MYEULER = 'YXZ' #'ZXY'
             mat = bone.matrix.copy()
             
+            pmat = bone.matrix.copy()
             currbone = bone
             if currbone.parent is not None:         
                 pmat = currbone.parent.matrix.copy()
                 pmat.invert()
                 mat = mat @ pmat
                 currbone = currbone.parent
-  
+            #there seems to be a major difference in IK based rots, and manual rots. 
+            #the matrix inversion with 'YXZ' euler order seems to be correct for IK targetted bones
+            #but its way overkill for manually rotated stuff
+            #maybe there are two separate rotations, e.g. 
+            #bpy.context.object.pose.bones["rdoor.R"].rotation_euler[0] = 0.105584
+            #and the parent matrix based one
+            #but how to choose between these for IK and FK bones?
+            #wierd as fuck....
+            #use the locs  and rots from the fcurves, and then in pass 2 merge on the actual ones?
+            #We KNOW which bones have FK fcurves - those are the ones manually set
+            #We can also fiogure out, from the IK constraints and the chain lengths, which bones have IK on them
+                #bpy.context.object.pose.bones["rankle.R"].constraints["IK"].mute = False
+
             
-            rot = mat.to_euler('ZXY')
+            
+            rot = mat.to_euler(MYEULER)#, pmat.to_euler(MYEULER) )
+            
             row = self.layout.row()
             rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
             #print (rottext)
@@ -538,7 +554,13 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
                 rottext = '[!] '+rottext
                 row.alert = True
             row.label(text=rottext)
-            #row = self.layout.row()
+            row = self.layout.row()
+            rottext = 'E %s X:%.1f Y:%.1f Z:%.1f'%(bname,
+                degrees(arm.pose.bones[bname].rotation_euler[0]),
+                degrees(arm.pose.bones[bname].rotation_euler[1]),
+                degrees(arm.pose.bones[bname].rotation_euler[2])
+                )
+            row.label(text = rottext)
             #row.label(text='X%.1f'%(mat[0][3]))
             #row.label(text='Y%.1f'%(mat[1][3]))
             #row.label(text='Z%.1f'%(mat[2][3]))
@@ -568,7 +590,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print ("whichframe",self.whichframe)
         self.whichframe +=1
         props = {"location":"move", "rotation_euler":"turn"} 
-        
+        boneswithcurves = []
+        bonesinIKchains = []
         
         #things I know:
         # curves contain the needed location data
@@ -592,6 +615,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     bname = c.data_path.split('"')[1]
                     if bname.startswith('iktarget.'):
                         continue
+                    if bname not in boneswithcurves:
+                        boneswithcurves.append(bname)
+                        
                     if bname.endswith('.R') or bname.endswith('.L'):
                         bname = bname[:-2]
                     
@@ -629,32 +655,53 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 #row = self.layout.row()
                 #row.label(text = bone.name)
                 bname = bone.name
+                if 'IK' in bone.constraints and bone.constraints['IK'].mute == False:
+                    chainlength = bone.constraints['IK'].chain_count
+                    print (bone.name, 'has ik length',chainlength)
+                    p = bone
+                    while chainlength >0:
+                        print ("inchain",p.name)
+                        if p.name not in bonesinIKchains:
+                            bonesinIKchains.append(p.name)
+                        chainlength = chainlength -1
+                        p = p.parent
+                            
+                
                 if bname.endswith('.R') or bname.endswith('.L'):
                     bname = bname[:-2]
                 mat = bone.matrix.copy()
                 
+                MYEULER = 'YXZ' #'ZXY'
                 currbone = bone
+                pmat = bone.matrix.copy()
                 if currbone.parent is not None:  
                     pmat = currbone.parent.matrix.copy()
                     pmat.invert()
-                    if 'lfoot' in bname:
-                        pass 
-                        #print (currbone.name,'->',currbone.parent.name, mat, pmat)
+
                     mat = mat @ pmat
                     currbone = currbone.parent
  
                 
-                rot = mat.to_euler('ZXY')
+                rot = mat.to_euler(MYEULER, pmat.to_euler(MYEULER) )
                 rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
                 print (rottext)
-                
-                for axis,value  in enumerate(rot[0:3]):                        
-                    if frameidx not in animframes:
-                        animframes[frameidx] = {}
-                    if bname not in animframes[frameidx]:
-                        animframes[frameidx][bname] = {}
-                    print ('adding',frameidx,bname,'rot'+str(axis),value)
-                    animframes[frameidx][bname]['rot'+str(axis)] = degrees(value)
+                 
+                if bone.name not in bonesinIKchains:
+                    for axis in range(3):
+                        if frameidx not in animframes:
+                            animframes[frameidx] = {}
+                        if bname not in animframes[frameidx]:
+                            animframes[frameidx][bname] = {}
+                        animframes[frameidx][bname]['rot'+str(axis)] = degrees(arm.pose.bones[bone.name].rotation_euler[axis])
+
+                else:
+                    for axis,value  in enumerate(rot[0:3]):                        
+                        if frameidx not in animframes:
+                            animframes[frameidx] = {}
+                        if bname not in animframes[frameidx]:
+                            animframes[frameidx][bname] = {}
+                        print ('adding',frameidx,bname,'rot'+str(axis),value)
+                        animframes[frameidx][bname]['rot'+str(axis)] = degrees(value)
                     
         print ("animframes:",animframes)        
         fps = 30.0
@@ -705,6 +752,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             prevframe = animframes[frameidxs[i-1]]
             
             sleeptime = sleepperframe * (frameidxs[i] - frameidxs[i-1])
+            framedelta = frameidxs[i] - frameidxs[i-1]
             
             
             
@@ -766,9 +814,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
    
             
             if firststep:
-                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -1))
+                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
             else:
-                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -1))
+                outf.write('\t\tsleep %i;\n'%(1000*sleeptime -framedelta))
             
         
             if firststep:
@@ -806,6 +854,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
         
         outf.close()
         print ("Done writing bos!")
+        print (bonesinIKchains)
+        print (boneswithcurves)
 
 def register():
     bpy.utils.register_class(SkeletorOperator)
