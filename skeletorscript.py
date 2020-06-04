@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 2),
+    "version": (0, 1, 3),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -49,9 +49,15 @@ piecehierarchy = None
 
 class MySettings(PropertyGroup):
 
-    my_bool : BoolProperty(
-        name="Enable or Disable",
-        description="A bool property",
+    is_walk : BoolProperty(
+        name="Is Walk Script",
+        description="Whether the animation loops",
+        default = True
+        )
+        
+    varspeed : BoolProperty(
+        name="Variable speed walk",
+        description="Whether walk anim should be unitspeed dependant",
         default = True
         )
 
@@ -73,7 +79,8 @@ class Skelepanel(bpy.types.Panel):
 
         row = layout.row()
         row.operator('skele.skeletoroperator',text = '2. Create Skeleton')
-        layout.prop(mytool, "my_bool", text="Walk Script")
+        layout.prop(mytool, "is_walk", text="Is Walk Script")
+        layout.prop(mytool, "varspeed", text="Variable speed")
         row = layout.row()
         row.operator('skele.skeletorbosmaker',text = '3. Create BOS')
         
@@ -565,6 +572,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #row.label(text='Y%.1f'%(mat[1][3]))
             #row.label(text='Z%.1f'%(mat[2][3]))
 
+
 class SkeletorBOSMaker(bpy.types.Operator):
     bl_idname = "skele.skeletorbosmaker"
     bl_label = "skeletor_bosmaker"
@@ -593,8 +601,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
         boneswithcurves = []
         bonesinIKchains = []
         
-        ISWALK = True
-        VARIABLESPEED = True
+        ISWALK = context.scene.my_tool.is_walk
+        VARIABLESPEED = context.scene.my_tool.varspeed
         #things I know:
         # curves contain the needed location data
         # pose bones matrices contain the needed rotation data
@@ -852,7 +860,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
             else:
                 outf.write('\t\t}\n')
                         
-        outf.write('\t}\n')
+        if ISWALK:
+            outf.write('\t}\n')
 
         outf.write('}\n')
         if ISWALK:
@@ -882,7 +891,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write(' }\n}\n')
         
         outf.close()
-        print ("Done writing bos!")
+        print ("Done writing bos!", " ISWALK = ",ISWALK, "Varspeed = ",VARIABLESPEED)
         print ("bonesinIKchains:",bonesinIKchains)
         print ("boneswithcurves:",boneswithcurves)
 
