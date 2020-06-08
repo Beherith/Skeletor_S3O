@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 3),
+    "version": (0, 1, 4),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -59,6 +59,11 @@ class MySettings(PropertyGroup):
         name="Variable speed walk",
         description="Whether walk anim should be unitspeed dependant",
         default = True
+        )    
+    iktargetends : BoolProperty(
+        name="Where to place IK targets",
+        description="Whether IK targets should be at the leafs of anim chains or one branch above",
+        default = True
         )
 
 class Skelepanel(bpy.types.Panel):
@@ -77,6 +82,7 @@ class Skelepanel(bpy.types.Panel):
         row = layout.row()
         row.operator("skele.skeletorrotator",text = '1. Correctly rotate S3O')
 
+        layout.prop(mytool, "iktargetends", text="IK targets at leafs")
         row = layout.row()
         row.operator('skele.skeletoroperator',text = '2. Create Skeleton')
         layout.prop(mytool, "is_walk", text="Is Walk Script")
@@ -244,6 +250,7 @@ class SkeletorOperator(bpy.types.Operator):
     def skeletize(context):
         print ("skeletizing, very happy")
         NOTAIL = True
+        IKTARGETENDS = context.scene.my_tool.iktargetends
 
         #debug delete all armatures and bones!
         #bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -422,12 +429,20 @@ class SkeletorOperator(bpy.types.Operator):
                         #this looks like a foot
                         tailpos = piece.worldpos + Vector((0, boundingbox[3], boundingbox[4]))
                         #better add the heel IK thing too XD
-                        heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
-                        heelbone.head = piece.parent.bone.tail #newbone.head
-                        heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
-                        if NOTAIL:
-                            heelbone.tail =  heelbone.head + Vector((0,5,2))
-                        piece.parent.iktarget = heelbone
+                        if not IKTARGETENDS:
+                            heelbone = arm_data.edit_bones.new('iktarget.'+piece.parent.bonename)
+                            heelbone.head = piece.parent.bone.tail #newbone.head
+                            heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
+                            if NOTAIL:
+                                heelbone.tail =  heelbone.head + Vector((0,5,2))
+                            piece.parent.iktarget = heelbone
+                        else:
+                            heelbone = arm_data.edit_bones.new('iktarget.'+piece.bonename)
+                            heelbone.head = newbone.tail #newbone.head
+                            heelbone.tail = newbone.head + Vector((0,boundingbox[4],0))
+                            if NOTAIL:
+                                heelbone.tail =  heelbone.head + Vector((0,5,2))
+                            piece.iktarget = heelbone
                     else:
                         #todo this is not a foot
                         #guess if it points forward or up or down?
@@ -666,14 +681,25 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 bname = bone.name
                 if 'IK' in bone.constraints and bone.constraints['IK'].mute == False:
                     chainlength = bone.constraints['IK'].chain_count
-                    print (bone.name, 'has ik length',chainlength)
-                    p = bone
-                    while chainlength >0:
-                        print ("inchain",p.name)
-                        if p.name not in bonesinIKchains:
-                            bonesinIKchains.append(p.name)
-                        chainlength = chainlength -1
-                        p = p.parent
+                    if chainlength == 0: #this means that everything up until the root is in the chain
+                        print (bone.name, 'has ik length',chainlength)
+                        p = bone
+                        while p is not None:
+                            print ("inchain",p.name)
+                            if p.name not in bonesinIKchains:
+                                bonesinIKchains.append(p.name)
+                            chainlength = chainlength -1
+                            p = p.parent
+                        
+                    else:
+                        print (bone.name, 'has ik length',chainlength)
+                        p = bone
+                        while chainlength > 0:
+                            print ("inchain",p.name)
+                            if p.name not in bonesinIKchains:
+                                bonesinIKchains.append(p.name)
+                            chainlength = chainlength -1
+                            p = p.parent
                             
                 
                 if bname.endswith('.R') or bname.endswith('.L'):
@@ -784,18 +810,27 @@ class SkeletorBOSMaker(bpy.types.Operator):
             for bname in sorted(thisframe.keys()):
                 motions = thisframe[bname]
                 rotations_sum = 0
+                
                 for axis, value in motions.items():
                     #find previous value
+                    #TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
+                    # handle separately for idle anims, as they dont require accurate keyframe reinterpolation
+                    sleeptime = sleepperframe * framedelta
                     prevvalue = 0
+                    prevframe = i-1
                     foundprev = False
                     for previous in range(i-1,-1,-1):
                         if bname in animframes[frame_indexes[previous]] and axis in animframes[frame_indexes[previous]][bname]:
                             prevvalue = animframes[frame_indexes[previous]][bname][axis]
                             foundprev = True
+                            prevframe = previous
                             break
                     if not foundprev:
                         print ("Failed to find previous position for bone",bname,'axis',axis)                  
-  
+                    else:
+                        pass
+                        #sleeptime = sleepperframe * (frame_indexes[i] - frame_indexes[prevframe])
+                        
                     axidx = AXES[int(axis[-1])]
                     ax = int(axis[-1])
                     axmul = [-1.0,-1.0,1.0]
@@ -813,7 +848,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             stopwalking_cmd = 'move %s to %s'
                         
                         stopwalking_cmd = stopwalking_cmd % (bname,BOSAXIS[ax])
-                        maxvelocity = abs(value-prevvalue) /sleeptime
+                        maxvelocity = abs(value-prevvalue) / sleeptime
                         if stopwalking_cmd in stopwalking_maxspeed:
                             if maxvelocity > stopwalking_maxspeed[stopwalking_cmd]:
                                 stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
@@ -883,7 +918,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write(' while(TRUE){\n')
             outf.write('  animSpeed = (get CURRENT_SPEED);\n')
             outf.write('  if (animSpeed<1) animSpeed=1;\n')
-            outf.write('  animSpeed = (maxSpeed * %i) / (get CURRENT_SPEED); \n' % animFPK)
+            outf.write('  animSpeed = (maxSpeed * %i) / animSpeed; \n' % animFPK)
             outf.write('  //get PRINT(maxSpeed, animFramesPerKeyframe, animSpeed);\n')
             outf.write('  if (animSpeed<%i) animSpeed=%i;\n' %(int(animFPK/2), int(animFPK/2)))
             outf.write('  if (animspeed>%i) animSpeed = %i;\n'%(animFPK*2, animFPK*2))
@@ -916,6 +951,5 @@ def unregister():
     
 if __name__ == "__main__":
     register()
-    
     
     
