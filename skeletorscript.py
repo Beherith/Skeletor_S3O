@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 4),
+    "version": (0, 1, 6),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -64,6 +64,11 @@ class MySettings(PropertyGroup):
         name="Where to place IK targets",
         description="Whether IK targets should be at the leafs of anim chains or one branch above",
         default = True
+        )    
+    firstframestance : BoolProperty(
+        name="First Keyframe Stance",
+        description="The first keyframe contains an idle stance (non zero) that the unit returns to when not walking",
+        default = True
         )
 
 class Skelepanel(bpy.types.Panel):
@@ -87,6 +92,7 @@ class Skelepanel(bpy.types.Panel):
         row.operator('skele.skeletoroperator',text = '2. Create Skeleton')
         layout.prop(mytool, "is_walk", text="Is Walk Script")
         layout.prop(mytool, "varspeed", text="Variable speed")
+        layout.prop(mytool, "firstframestance", text="First Frame Stance")
         row = layout.row()
         row.operator('skele.skeletorbosmaker',text = '3. Create BOS')
         
@@ -184,6 +190,27 @@ def getS3ORootObject():
                     rootname = object.name
                     return rootobject,rootname
                     break
+                
+def properrot(bone, MYEULER = 'YXZ',parentEULER = True):
+    #MYEULER = 'YXZ' #'ZXY' #BECAUSE FUCK ME THATS WHY
+    mat = bone.matrix.copy()
+    pmat = bone.matrix.copy()
+    currbone = bone
+    if currbone.parent is not None:         
+        pmat = currbone.parent.matrix.copy()
+        pmat.invert()
+        #mat = mat @ pmat # OH BOY IS THIS WRONG!
+        mat = pmat @ mat
+
+
+        currbone = currbone.parent
+
+    if parentEULER:
+        rot = mat.to_euler(MYEULER, pmat.to_euler(MYEULER) )
+    else:
+        rot = mat.to_euler(MYEULER)#, pmat.to_euler(MYEULER) )
+    rottext = '%s %s %i X:%.1f Y:%.1f Z:%.1f'%(bone.name,MYEULER,parentEULER,degrees(rot.x),degrees(rot.y),degrees(rot.z))
+    return rottext
 
 class SkeletorRotator(bpy.types.Operator):
     bl_idname = "skele.skeletorrotator"
@@ -340,7 +367,7 @@ class SkeletorOperator(bpy.types.Operator):
         scene = context.scene
         for obj in scene.objects:
             obj.select_set(False)
-            obj.rotation_mode = 'ZXY'
+            obj.rotation_mode = 'YXZ' # was: 'ZXY', but that is prolly wrong
         
         #add an armature!
         print ("====Creating Armature====")
@@ -352,7 +379,7 @@ class SkeletorOperator(bpy.types.Operator):
         armature_object.data.show_axes = True
         armature_object.data.show_names = True
 
-        armature_object.rotation_mode = 'ZXY'
+        armature_object.rotation_mode = 'YXZ' # was: 'ZXY', but that is prolly wrong
         
         context.collection.objects.link(armature_object)
         
@@ -480,7 +507,7 @@ class SkeletorOperator(bpy.types.Operator):
         
         for name,piece in pieces.items():
             if not piece.isAimXY:
-                armature_object.pose.bones[piece.bonename].rotation_mode = 'ZXY'
+                armature_object.pose.bones[piece.bonename].rotation_mode = 'YXZ' # was: 'ZXY', but that is prolly wrong
 
             if piece.iktarget is not None:
                 chainlength = 1
@@ -549,7 +576,8 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             if currbone.parent is not None:         
                 pmat = currbone.parent.matrix.copy()
                 pmat.invert()
-                mat = mat @ pmat
+                #mat = mat @ pmat # OH BOY IS THIS WRONG!
+                mat = pmat @ mat
                 currbone = currbone.parent
 
             #there seems to be a major difference in IK based rots, and manual rots. 
@@ -572,6 +600,11 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
             #print (rottext)
             if bname in selectednames:
                 rottext = '  '+rottext.upper()
+                for eulertype in ['XYZ','XZY','YXZ','YZX','ZXY','ZYX']:
+                    for ptype in [False,True]:
+                        row.label(text = properrot(bone,MYEULER = eulertype, parentEULER = ptype))
+                        row = self.layout.row()
+                
             if sum([abs(degrees(rot.x)),abs(degrees(rot.y)),abs(degrees(rot.z))])> 135:
                 rottext = '[!] '+rottext
                 row.alert = True
@@ -618,6 +651,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
         
         ISWALK = context.scene.my_tool.is_walk
         VARIABLESPEED = context.scene.my_tool.varspeed
+        FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
+        # for a sane firstframestance:
+        # some pieces may be moved in a stance that are not present in the walk
+        # when setting stance, make sure of the following:
+        
         #things I know:
         # curves contain the needed location data
         # pose bones matrices contain the needed rotation data
@@ -713,10 +751,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     pmat = currbone.parent.matrix.copy()
                     pmat.invert()
 
-                    mat = mat @ pmat
+                    #mat = mat @ pmat # OH BOY IS THIS WRONG!
+                    mat = pmat @ mat
                     currbone = currbone.parent
                 
-                rot = mat.to_euler(MYEULER, pmat.to_euler(MYEULER) )
+                #rot = mat.to_euler(MYEULER, pmat.to_euler(MYEULER) )
+                rot = mat.to_euler(MYEULER)#, pmat.to_euler(MYEULER) )
                 rottext = '%s X:%.1f Y:%.1f Z:%.1f'%(bname,degrees(rot.x),degrees(rot.y),degrees(rot.z))
                 print (rottext)
                  
@@ -780,6 +820,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 print(warn)
             
         stopwalking_maxspeed = {} #dict of of bos commands, with max velocity in it to define the stopwalking function
+        firstframestance_positions = {} #dict of bos commands, with the target of the piece as value
         if ISWALK:
             outf.write("Walk() {//%s from %s \n"%("Created by https://github.com/Beherith/Skeletor_S3O",filepath ))
         else:
@@ -790,7 +831,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             firststep = False
             
         for i, frameidx in enumerate(frame_indexes):
-            if i == 0: #skip first piece
+            if i == 0 and not FIRSTFRAMESTANCE: #skip first piece
                 continue
             
             thisframe = animframes[frame_indexes[i]]
@@ -798,15 +839,16 @@ class SkeletorBOSMaker(bpy.types.Operator):
             
             framedelta = frame_indexes[i] - frame_indexes[i-1]
             sleeptime = sleepperframe * framedelta
-
-            if firststep:
-                outf.write("\tif (bMoving) {\n")
-            else:
-                if ISWALK:
-                    outf.write("\t\tif (bMoving) {\n")
+            
+            if i > 0:
+                if firststep:
+                    outf.write("\tif (bMoving) { //Frame:%i\n"%frameidx)
                 else:
-                    outf.write("\t\tif (bAnimate) {\n")
-                
+                    if ISWALK:
+                        outf.write("\t\tif (bMoving) { //Frame:%i\n"%frameidx)
+                    else:
+                        outf.write("\t\tif (bAnimate) { //Frame:%i\n"%frameidx)
+                    
             for bname in sorted(thisframe.keys()):
                 motions = thisframe[bname]
                 rotations_sum = 0
@@ -825,8 +867,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             foundprev = True
                             prevframe = previous
                             break
-                    if not foundprev:
-                        print ("Failed to find previous position for bone",bname,'axis',axis)                  
+                    if not foundprev and i>0:
+                        print ("Warning: Failed to find previous position for bone",bname,'axis',axis,'frame', frame_indexes[i])                  
                     else:
                         pass
                         #sleeptime = sleepperframe * (frame_indexes[i] - frame_indexes[prevframe])
@@ -835,7 +877,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     ax = int(axis[-1])
                     axmul = [-1.0,-1.0,1.0]
                     if abs(value-prevvalue)<0.1: 
-                        #print ("Ignored %s %s of %.6f delta"%(bname,axis,value-prevvalue))
+                        print ("%i Ignored %s %s of %.6f delta"%(frameidx,bname,axis,value-prevvalue))
                         continue
                     else:
                         
@@ -848,6 +890,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             stopwalking_cmd = 'move %s to %s'
                         
                         stopwalking_cmd = stopwalking_cmd % (bname,BOSAXIS[ax])
+                        if FIRSTFRAMESTANCE and i ==0:
+                            firstframestance_positions[stopwalking_cmd]=value * axmul[ax]
+ 
+                                
                         maxvelocity = abs(value-prevvalue) / sleeptime
                         if stopwalking_cmd in stopwalking_maxspeed:
                             if maxvelocity > stopwalking_maxspeed[stopwalking_cmd]:
@@ -880,20 +926,25 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             print (gwarn)        
                             BOS += '//'+gwarn+'\n'
                         if not foundprev:
-                            BOS += '//' + "Failed to find previous position for bone"+bname+'axis'+axis
-                        outf.write(BOS+'\n')
-                        
-            if firststep or not VARIABLESPEED:
-                outf.write('\t\tsleep %i;\n'%(33*framedelta -1))
-            else:
-                outf.write('\t\tsleep ((33*animSpeed) -1);\n')
+                            BOS += '//' + "Failed to find previous position for bone"+bname+'axis'+axis 
+                        if i>0:
+                            outf.write(BOS+'\n')
+                        else:
+                            if FIRSTFRAMESTANCE:
+                                stopwalking_cmd
+                                
+            if i>0:
+                if firststep or not VARIABLESPEED:
+                    outf.write('\t\tsleep %i;\n'%(33*framedelta -1))
+                else:
+                    outf.write('\t\tsleep ((33*animSpeed) -1);\n')
 
-            if firststep:
-                outf.write("\t}\n")
-                outf.write("\twhile(bMoving) {\n")
-                firststep = False
-            else:
-                outf.write('\t\t}\n')
+                if firststep:
+                    outf.write("\t}\n")
+                    outf.write("\twhile(bMoving) {\n")
+                    firststep = False
+                else:
+                    outf.write('\t\t}\n')
                         
         if ISWALK:
             outf.write('\t}\n')
@@ -904,10 +955,21 @@ class SkeletorBOSMaker(bpy.types.Operator):
         else:
             outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
         for restore in sorted(stopwalking_maxspeed.keys()):
-            if restore.startswith('turn'):
-                outf.write('\t'+restore+ ' <0> speed <%.6f>;\n'%stopwalking_maxspeed[restore])
-            if restore.startswith('move'):
-                outf.write('\t'+restore+ ' [0] speed [%.6f];\n'%stopwalking_maxspeed[restore])
+            if FIRSTFRAMESTANCE:
+                stance_position = 0
+                if restore in firstframestance_positions:
+                    stance_position = firstframestance_positions[restore]
+                else:
+                    print ("Stance key %s not found in %s"%(restore,firstframestance_positions))
+                if restore.startswith('turn'):
+                    outf.write('\t'+restore+ ' <%.6f> speed <%.6f>;\n'%(stance_position,stopwalking_maxspeed[restore]))
+                if restore.startswith('move'):
+                    outf.write('\t'+restore+ ' [%.6f] speed [%.6f];\n'%(stance_position,stopwalking_maxspeed[restore]))
+            else:
+                if restore.startswith('turn'):
+                    outf.write('\t'+restore+ ' <0> speed <%.6f>;\n'%stopwalking_maxspeed[restore])
+                if restore.startswith('move'):
+                    outf.write('\t'+restore+ ' [0] speed [%.6f];\n'%stopwalking_maxspeed[restore])
         outf.write('}\n')
         
         if ISWALK and VARIABLESPEED:
