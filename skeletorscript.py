@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 1, 6),
+    "version": (0, 2, 1),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -624,7 +624,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 class SkeletorBOSMaker(bpy.types.Operator):
     bl_idname = "skele.skeletorbosmaker"
     bl_label = "skeletor_bosmaker"
-    bl_description = "Writes .bos to console"
+    bl_description = "Writes *_bos_export.txt next to .blend file"
     bl_options = {'REGISTER','UNDO'}
     
     def execute(self,context):
@@ -705,7 +705,37 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         animframes[frameidx][bname][ctarget+axis] = value
         
         print (animframes)
-
+        
+        print ("Gathering IK chains")
+        
+        for bone in arm.pose.bones:
+            if 'iktarget' in bone.name:
+                continue
+            bname = bone.name
+            if 'IK' in bone.constraints and bone.constraints['IK'].mute == False:
+                chainlength = bone.constraints['IK'].chain_count
+                if chainlength == 0: #this means that everything up until the root is in the chain
+                    print (bone.name, 'has ik length',chainlength)
+                    p = bone
+                    while p is not None:
+                        print ("inchain",p.name)
+                        if p.name not in bonesinIKchains:
+                            bonesinIKchains.append(p.name)
+                        chainlength = chainlength -1
+                        p = p.parent
+                    
+                else:
+                    print (bone.name, 'has ik length',chainlength)
+                    p = bone
+                    while chainlength > 0:
+                        print ("inchain",p.name)
+                        if p.name not in bonesinIKchains:
+                            bonesinIKchains.append(p.name)
+                        chainlength = chainlength -1
+                        p = p.parent
+                        
+        print ("gathering animdata")
+        
         for frameidx in sorted(animframes.keys()):
             print ("SETTING FRAMETIME",frameidx)
             bpy.context.scene.frame_set(frameidx)
