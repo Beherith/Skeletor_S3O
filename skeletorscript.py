@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 2),
+    "version": (0, 2, 3),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -889,11 +889,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                     else:
                         if axis.startswith('location'):  # Move
                             blender_to_bos_axis_multiplier = [1.0, 1.0, 1.0]  # for moves
-                            bos_cmd = '\t\t\tmove %s to %s [%.6f] speed [%.6f] %s; '
+                            bos_cmd = '\t\t\tmove %s to %s [%.6f] speed [%.6f] %s; //delta=%.2f '
                             stopwalking_cmd = 'move %s to %s'
                         else:  # turn
                             stopwalking_cmd = 'turn %s to %s'
-                            bos_cmd = '\t\t\tturn %s to %s <%.6f> speed <%.6f> %s; '
+                            bos_cmd = '\t\t\tturn %s to %s <%.6f> speed <%.6f> %s; //delta=%.2f '
                             blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
 
                         stopwalking_cmd = stopwalking_cmd % (bone_name, BOSAXIS[axis_index])
@@ -916,7 +916,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                 BOSAXIS[axis_index],
                                 value * blender_to_bos_axis_multiplier[axis_index],
                                 abs(value - prevvalue) * fps,
-                                '/ animSpeed'
+                                '/ animSpeed',
+                                value-prevvalue
 
                             )
                         else:
@@ -925,7 +926,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                 BOSAXIS[axis_index],
                                 value * blender_to_bos_axis_multiplier[axis_index],
                                 abs(value - prevvalue) / sleeptime,
-                                ''
+                                '',
+                                value-prevvalue
                             )
 
                         if rotations_sum > 130:
@@ -941,10 +943,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             outf.write(BOS + '\n')
 
             if frame_index > 0:
-                if firststep or not VARIABLESPEED:
-                    outf.write('\t\tsleep %i;\n' % (33 * keyframe_delta - 1))
-                else:
+            
+                if VARIABLESPEED:
                     outf.write('\t\tsleep ((33*animSpeed) -1);\n')
+                else:
+                    outf.write('\t\tsleep %i;\n' % (33 * keyframe_delta - 1))
 
                 if firststep:
                     outf.write("\t}\n")
@@ -990,7 +993,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write('\tmaxSpeed = maxSpeed + (maxSpeed /(2*animFramesPerKeyframe)); // add fudge\n')
             outf.write('\twhile(TRUE){\n')
             outf.write('\t\tanimSpeed = (get CURRENT_SPEED);\n')
-            outf.write('\t\if (animSpeed<1) animSpeed=1;\n')
+            outf.write('\t\tif (animSpeed<1) animSpeed=1;\n')
             outf.write('\t\tanimSpeed = (maxSpeed * %i) / animSpeed; \n' % animFPK)
             outf.write(
                 '\t\t//get PRINT(maxSpeed, animFramesPerKeyframe, animSpeed); //how to print debug info from bos\n')
