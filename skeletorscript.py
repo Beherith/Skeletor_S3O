@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 3),
+    "version": (0, 2, 4),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -829,7 +829,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write("Walk() {//%s from %s \n\t//set-signal-mask SIG_WALK;\n" % (
             "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
         else:
-            outf.write("Animate() {//%s from %s\n\t//set-signal-mask SIG_WALK | SIG_AIM; //you might need this\n" % (
+            outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
+            outf.write("Animate() {//%s from %s\n\t//set-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (
             "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
 
         firststep = True
@@ -1001,8 +1002,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write('\t\tif (animspeed>%i) animSpeed = %i;\n' % (animFPK * 2, animFPK * 2))
             outf.write('\t\tsleep %i;\n' % (33 * animFPK - 1))
             outf.write('\t}\n}\n')
-            outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tbMoving=TRUE;\n\t start-script Walk();\n}\n')
-            outf.write('StopMoving(){\n\tsignal SIG_WALK;\n\tbMoving=FALSE;\n\t call-script StopWalking();\n}\n')
+            outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tbMoving=TRUE;\n\tstart-script Walk();\n}\n')
+            outf.write('StopMoving(){\n\t\\signal SIG_WALK;\n\tbMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
 
         outf.close()
         print ("Done writing bos!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
