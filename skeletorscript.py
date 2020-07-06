@@ -449,7 +449,7 @@ class SkeletorOperator(bpy.types.Operator):
                     print ("LOOKS LIKE AN ARM:", piece.name)
                     ikbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
                     ikbone.head = newbone.tail
-                    ikbone.tail = newbone.tail + Vector((0, 5, 2))
+                    ikbone.tail = newbone.tail + Vector((0, 5, 0))
                     piece.iktarget = ikbone
 
             else:  # end piece
@@ -468,14 +468,14 @@ class SkeletorOperator(bpy.types.Operator):
                             heelbone.head = piece.parent.bone.tail  # newbone.head
                             heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
                             if NOTAIL:
-                                heelbone.tail = heelbone.head + Vector((0, 5, 2))
+                                heelbone.tail = heelbone.head + Vector((0, 5, 0))
                             piece.parent.iktarget = heelbone
                         else:
                             heelbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
                             heelbone.head = newbone.tail  # newbone.head
                             heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
                             if NOTAIL:
-                                heelbone.tail = heelbone.head + Vector((0, 5, 2))
+                                heelbone.tail = heelbone.head + Vector((0, 5, 0))
                             piece.iktarget = heelbone
                     else:
                         # todo this is not a foot
