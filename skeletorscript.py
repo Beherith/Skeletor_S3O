@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 4),
+    "version": (0, 2, 7),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -52,7 +52,6 @@ class MySettings(PropertyGroup):
         description="Whether the animation loops",
         default=True
     )
-
     varspeed: BoolProperty(
         name="Variable speed walk",
         description="Whether walk anim should be unitspeed dependant",
@@ -68,6 +67,12 @@ class MySettings(PropertyGroup):
         description="The first keyframe contains an idle stance (non zero) that the unit returns to when not walking",
         default=True
     )
+    is_death: BoolProperty(
+        name="Is Death Script",
+        description="Unit dies, move pieces far to explode them",
+        default=False
+    )
+
 
 
 class Skelepanel(bpy.types.Panel):
@@ -83,17 +88,18 @@ class Skelepanel(bpy.types.Panel):
         scene = context.scene
         mytool = scene.my_tool
 
-        row = layout.row()
-        row.operator("skele.skeletorrotator", text='1. Correctly rotate S3O')
+        #row = layout.row()
+        #row.operator("skele.skeletorrotator", text='1. Correctly rotate S3O')
 
         layout.prop(mytool, "iktargetends", text="IK targets at leafs")
         row = layout.row()
-        row.operator('skele.skeletoroperator', text='2. Create Skeleton')
+        row.operator('skele.skeletoroperator', text='1. Create Skeleton')
         layout.prop(mytool, "is_walk", text="Is Walk Script")
         layout.prop(mytool, "varspeed", text="Variable speed")
         layout.prop(mytool, "firstframestance", text="First Frame Stance")
+        layout.prop(mytool, "is_death", text="Is Death Script")
         row = layout.row()
-        row.operator('skele.skeletorbosmaker', text='3. Create BOS')
+        row.operator('skele.skeletorbosmaker', text='2. Create BOS')
 
 
 class S3opiece:
@@ -653,8 +659,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
         props = {"location": "move", "rotation_euler": "turn"}
         boneswithcurves = []
         bonesinIKchains = []
-
+        explodedpieces = []
         ISWALK = context.scene.my_tool.is_walk
+        ISDEATH = context.scene.my_tool.is_death
         VARIABLESPEED = context.scene.my_tool.varspeed
         FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
 
@@ -677,7 +684,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 print ("Animdata:", curves, arm.animation_data)
                 for c in curves:
                     keyframes = c.keyframe_points
-                    bone_name = c.data_path.split('"')[1]
+                    try:
+                        bone_name = c.data_path.split('"')[1]
+                    except IndexError:
+                        print ("Unable to parse bone name from:",c,c.data_path)
+                        print ("You probably have objects animated that are not parented to bones (i.e. not part of the model)")
+                        continue
                     if bone_name.startswith('iktarget.'):
                         continue
                     if bone_name not in boneswithcurves:
@@ -830,7 +842,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
         else:
             outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
-            outf.write("Animate() {//%s from %s\n\t//set-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (
+            outf.write("Animate() {//%s from %s\n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (
             "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
 
         firststep = True
@@ -853,6 +865,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 else:
                     if ISWALK:
                         outf.write("\t\tif (bMoving) { //Frame:%i\n" % frame_time)
+                    elif ISDEATH:
+                        outf.write("\t\tif (TRUE) { //Frame:%i\n" % frame_time)
                     else:
                         outf.write("\t\tif (bAnimate) { //Frame:%i\n" % frame_time)
 
@@ -888,6 +902,16 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         print ("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevvalue))
                         continue
                     else:
+                        if ISDEATH:
+                            if bone_name not in explodedpieces:
+                                if axis.startswith('location') and abs(value - prevvalue)> 100:
+                                    BOS = '\t\t\texplode %s FALL|SMOKE|FIRE;\n\t\t\thide %s;\n'%(bone_name,bone_name)
+                                    outf.write(BOS)
+                                    explodedpieces.append(bone_name)
+                                    continue
+                            else: #this piece has already blown up, ignore it
+                                continue
+
                         if axis.startswith('location'):  # Move
                             blender_to_bos_axis_multiplier = [1.0, 1.0, 1.0]  # for moves
                             bos_cmd = '\t\t\tmove %s to %s [%.6f] speed [%.6f] %s; //delta=%.2f '
