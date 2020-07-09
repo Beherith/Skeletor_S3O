@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 7),
+    "version": (0, 2, 8),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -660,6 +660,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         boneswithcurves = []
         bonesinIKchains = []
         explodedpieces = []
+        piecehierarchy = {} # for each bone, list its children.
         ISWALK = context.scene.my_tool.is_walk
         ISDEATH = context.scene.my_tool.is_death
         VARIABLESPEED = context.scene.my_tool.varspeed
@@ -721,8 +722,30 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
         print (animframes)
 
+        print ("Gathering piece hierarchy")
+            
+        def posebone_name_to_piece_name(posebone_name):
+            if 'iktarget' in bone.name:
+                return None
+            if posebone_name.endswith('.R') or posebone_name.endswith('.L'):
+                posebone_name = posebone_name[:-2]
+            return posebone_name
+        for bone in arm.pose.bones:
+            piecename = posebone_name_to_piece_name(bone.name)
+            if piecename is not None:
+                if piecename not in piecehierarchy:
+                    piecehierarchy[piecename] = []
+                if bone.parent:
+                    parentname = posebone_name_to_piece_name(bone.parent.name)
+                    if parentname is not None:
+                        if parentname not in piecehierarchy:
+                            piecehierarchy[parentname] = [piecename]
+                        else:
+                            piecehierarchy[parentname].append(piecename)
+        print ('piecehierarchy', piecehierarchy)
+            
         print ("Gathering IK chains")
-
+            
         for bone in arm.pose.bones:
             if 'iktarget' in bone.name:
                 continue
@@ -809,18 +832,18 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
         filepath = bpy.data.filepath
         print(filepath)
+        
+        INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath,bl_info['version'])
 
         AXES = 'XZY'
         BOSAXIS = ['x-axis', 'z-axis', 'y-axis']
         newfile_name = filepath + ".bos_export.txt"
         outf = open(newfile_name, 'w')
-        outf.write("// Generated for %s\n// Using https://github.com/Beherith/Skeletor_S3O \n" % filepath)
-        outf.write(
-            "// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
+        outf.write("// "+INFOSTRING+'\n')
         if ISWALK and VARIABLESPEED:
+            outf.write("// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
             outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, bMoving;\n#define SIG_WALK 4\n")
-
-        else:
+        elif not ISDEATH:
             outf.write("static-var bAnimate;\n")
 
         animSpeed = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
@@ -838,12 +861,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
         stopwalking_maxspeed = {}  # dict of of bos commands, with max velocity in it to define the stopwalking function
         firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
         if ISWALK:
-            outf.write("Walk() {//%s from %s \n\t//set-signal-mask SIG_WALK;\n" % (
-            "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
+            outf.write("Walk() {// %s \n\t//set-signal-mask SIG_WALK;\n" % (INFOSTRING))        
+        if ISDEATH:
+            outf.write("//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (INFOSTRING))
         else:
             outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
-            outf.write("Animate() {//%s from %s\n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (
-            "Created by https://github.com/Beherith/Skeletor_S3O", filepath))
+            outf.write("Animate() {// %s \n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (INFOSTRING))
 
         firststep = True
         if not ISWALK:
@@ -905,9 +928,15 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         if ISDEATH:
                             if bone_name not in explodedpieces:
                                 if axis.startswith('location') and abs(value - prevvalue)> 100:
-                                    BOS = '\t\t\texplode %s FALL|SMOKE|FIRE;\n\t\t\thide %s;\n'%(bone_name,bone_name)
-                                    outf.write(BOS)
-                                    explodedpieces.append(bone_name)
+                                
+                                    def recurseexplodechildren(piece_name):
+                                        BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE;\n\t\t\thide %s;\n'%(piece_name,piece_name)
+                                        outf.write(BOS)
+                                        explodedpieces.append(piece_name)
+                                        for child in piecehierarchy[piece_name]:
+                                            recurseexplodechildren(child)
+                                            
+                                    recurseexplodechildren(bone_name)
                                     continue
                             else: #this piece has already blown up, ignore it
                                 continue
@@ -985,29 +1014,31 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write('\t}\n')
 
         outf.write('}\n')
-        if ISWALK:
-            outf.write('// Call this from MotionControl()!\nStopWalking() {\n')
-        else:
-            outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
-        for restore in sorted(stopwalking_maxspeed.keys()):
-            if FIRSTFRAMESTANCE:
-                stance_position = 0
-                if restore in firstframestance_positions:
-                    stance_position = firstframestance_positions[restore]
-                else:
-                    print ("Stance key %s not found in %s" % (restore, firstframestance_positions))
-                if restore.startswith('turn'):
-                    outf.write(
-                        '\t' + restore + ' <%.6f> speed <%.6f>;\n' % (stance_position, stopwalking_maxspeed[restore]))
-                if restore.startswith('move'):
-                    outf.write(
-                        '\t' + restore + ' [%.6f] speed [%.6f];\n' % (stance_position, stopwalking_maxspeed[restore]))
+        
+        if not ISDEATH:
+            if ISWALK:
+                outf.write('// Call this from MotionControl()!\nStopWalking() {\n')
             else:
-                if restore.startswith('turn'):
-                    outf.write('\t' + restore + ' <0> speed <%.6f>;\n' % stopwalking_maxspeed[restore])
-                if restore.startswith('move'):
-                    outf.write('\t' + restore + ' [0] speed [%.6f];\n' % stopwalking_maxspeed[restore])
-        outf.write('}\n')
+                outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
+            for restore in sorted(stopwalking_maxspeed.keys()):
+                if FIRSTFRAMESTANCE:
+                    stance_position = 0
+                    if restore in firstframestance_positions:
+                        stance_position = firstframestance_positions[restore]
+                    else:
+                        print ("Stance key %s not found in %s" % (restore, firstframestance_positions))
+                    if restore.startswith('turn'):
+                        outf.write(
+                            '\t' + restore + ' <%.6f> speed <%.6f>;\n' % (stance_position, stopwalking_maxspeed[restore]))
+                    if restore.startswith('move'):
+                        outf.write(
+                            '\t' + restore + ' [%.6f] speed [%.6f];\n' % (stance_position, stopwalking_maxspeed[restore]))
+                else:
+                    if restore.startswith('turn'):
+                        outf.write('\t' + restore + ' <0> speed <%.6f>;\n' % stopwalking_maxspeed[restore])
+                    if restore.startswith('move'):
+                        outf.write('\t' + restore + ' [0] speed [%.6f];\n' % stopwalking_maxspeed[restore])
+            outf.write('}\n')
 
         if ISWALK and VARIABLESPEED:
             outf.write('// REMEMBER TO animspeed = %i in Create() !!\n' % animFPK)
