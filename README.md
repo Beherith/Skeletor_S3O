@@ -13,9 +13,7 @@ Usage:
 
 2. Register the script with blender 2.80+ 
 
-3. Go into object mode and select any part of the imported model
-
-4. Press the "Correctly rotate S3O" button, OR rotate the model around 90 degrees, so that Z is up, make sure its feet are on the ground, and apply rotation to ALL pieces, and apply the translation to the base piece only!
+3. Go into object mode and select the root piece (pelvis/base) of the model
 
 5. Press the "Create Skeleton" button
 
@@ -25,6 +23,7 @@ Usage:
 
 https://www.youtube.com/watch?v=gH5uATTTYB4
 
+8. Export to BOS.
 
 
 
