@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 9),
+    "version": (0, 3, 0),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -862,11 +862,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
         firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
         if ISWALK:
             outf.write("Walk() {// %s \n\t//set-signal-mask SIG_WALK;\n" % (INFOSTRING))        
-        if ISDEATH:
+        elif ISDEATH:
             outf.write("//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (INFOSTRING))
         else:
             outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
-            outf.write("Animate() {// %s \n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);\n\tbAnimate = TRUE;\n" % (INFOSTRING))
+            outf.write("Animate() {// %s \n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);//sleep between 3 and 25.6 seconds\n\tbAnimate = TRUE;\n" % (INFOSTRING))
 
         firststep = True
         if not ISWALK:
@@ -1058,7 +1058,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write('\t\tsleep %i;\n' % (33 * animFPK - 1))
             outf.write('\t}\n}\n')
             outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tbMoving=TRUE;\n\tstart-script Walk();\n}\n')
-            outf.write('StopMoving(){\n\t\\signal SIG_WALK;\n\tbMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
+            outf.write('StopMoving(){\n\tsignal SIG_WALK;\n\tbMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
 
         outf.close()
         print ("Done writing bos!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
