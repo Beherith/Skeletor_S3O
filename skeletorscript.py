@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 2, 8),
+    "version": (0, 2, 9),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -930,7 +930,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                 if axis.startswith('location') and abs(value - prevvalue)> 100:
                                 
                                     def recurseexplodechildren(piece_name):
-                                        BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE;\n\t\t\thide %s;\n'%(piece_name,piece_name)
+                                        BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE|NOHEATCLOUD;\n\t\t\thide %s;\n'%(piece_name,piece_name)
                                         outf.write(BOS)
                                         explodedpieces.append(piece_name)
                                         for child in piecehierarchy[piece_name]:
@@ -1017,7 +1017,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         
         if not ISDEATH:
             if ISWALK:
-                outf.write('// Call this from MotionControl()!\nStopWalking() {\n')
+                outf.write('// Call this from MotionControl()!\nStopWalking() {\n\tanimSpeed = 10; // tune restore speed here, higher values are slower restore speeds\n')
             else:
                 outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
             for restore in sorted(stopwalking_maxspeed.keys()):
@@ -1029,15 +1029,15 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         print ("Stance key %s not found in %s" % (restore, firstframestance_positions))
                     if restore.startswith('turn'):
                         outf.write(
-                            '\t' + restore + ' <%.6f> speed <%.6f>;\n' % (stance_position, stopwalking_maxspeed[restore]))
+                            '\t' + restore + ' <%.6f> speed <%.6f> / animSpeed;\n' % (stance_position, stopwalking_maxspeed[restore]*10))
                     if restore.startswith('move'):
                         outf.write(
-                            '\t' + restore + ' [%.6f] speed [%.6f];\n' % (stance_position, stopwalking_maxspeed[restore]))
+                            '\t' + restore + ' [%.6f] speed [%.6f] / animSpeed;\n' % (stance_position, stopwalking_maxspeed[restore]*10))
                 else:
                     if restore.startswith('turn'):
-                        outf.write('\t' + restore + ' <0> speed <%.6f>;\n' % stopwalking_maxspeed[restore])
+                        outf.write('\t' + restore + ' <0> speed <%.6f> / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
                     if restore.startswith('move'):
-                        outf.write('\t' + restore + ' [0] speed [%.6f];\n' % stopwalking_maxspeed[restore])
+                        outf.write('\t' + restore + ' [0] speed [%.6f] / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
             outf.write('}\n')
 
         if ISWALK and VARIABLESPEED:
