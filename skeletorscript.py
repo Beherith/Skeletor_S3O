@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 3, 0),
+    "version": (0, 3, 1),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -57,6 +57,11 @@ class MySettings(PropertyGroup):
         description="Whether walk anim should be unitspeed dependant",
         default=True
     )
+    varscale: BoolProperty(
+        name="Variable scale walk",
+        description="Whether move commands scale should be customizeable",
+        default=False
+    )
     iktargetends: BoolProperty(
         name="Where to place IK targets",
         description="Whether IK targets should be at the leafs of anim chains or one branch above",
@@ -96,6 +101,7 @@ class Skelepanel(bpy.types.Panel):
         row.operator('skele.skeletoroperator', text='1. Create Skeleton')
         layout.prop(mytool, "is_walk", text="Is Walk Script")
         layout.prop(mytool, "varspeed", text="Variable speed")
+        layout.prop(mytool, "varscale", text="Variable scale")
         layout.prop(mytool, "firstframestance", text="First Frame Stance")
         layout.prop(mytool, "is_death", text="Is Death Script")
         row = layout.row()
@@ -665,6 +671,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         ISDEATH = context.scene.my_tool.is_death
         VARIABLESPEED = context.scene.my_tool.varspeed
         FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
+        VARIABLESCALE = context.scene.my_tool.varscale
 
         # things I know:
         # curves contain the needed location data
@@ -840,6 +847,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
         newfile_name = filepath + ".bos_export.txt"
         outf = open(newfile_name, 'w')
         outf.write("// "+INFOSTRING+'\n')
+        if VARIABLESCALE:
+            outf.write("#define MOVESCALE 100\n")
         if ISWALK and VARIABLESPEED:
             outf.write("// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
             outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, bMoving;\n#define SIG_WALK 4\n")
@@ -944,6 +953,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         if axis.startswith('location'):  # Move
                             blender_to_bos_axis_multiplier = [1.0, 1.0, 1.0]  # for moves
                             bos_cmd = '\t\t\tmove %s to %s [%.6f] speed [%.6f] %s; //delta=%.2f '
+                            if VARIABLESCALE:
+                                bos_cmd = '\t\t\tmove %s to %s ([%.6f]*100)/MOVESCALE speed (([%.6f]*100)/MOVESCALE) %s; //delta=%.2f '
                             stopwalking_cmd = 'move %s to %s'
                         else:  # turn
                             stopwalking_cmd = 'turn %s to %s'
@@ -1031,13 +1042,21 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         outf.write(
                             '\t' + restore + ' <%.6f> speed <%.6f> / animSpeed;\n' % (stance_position, stopwalking_maxspeed[restore]*10))
                     if restore.startswith('move'):
-                        outf.write(
+                        if VARIABLESCALE:
+                            outf.write(
+                            '\t' + restore + ' ([%.6f]*100)/MOVESCALE speed (([%.6f]*100)/MOVESCALE) / animSpeed;\n' % (stance_position, stopwalking_maxspeed[restore]*10))
+                        else:
+                            outf.write(
                             '\t' + restore + ' [%.6f] speed [%.6f] / animSpeed;\n' % (stance_position, stopwalking_maxspeed[restore]*10))
                 else:
                     if restore.startswith('turn'):
                         outf.write('\t' + restore + ' <0> speed <%.6f> / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
                     if restore.startswith('move'):
-                        outf.write('\t' + restore + ' [0] speed [%.6f] / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
+                        if VARIABLESCALE:
+                            outf.write('\t' + restore + ' [0] speed [%.6f] / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
+                        else:
+                            outf.write('\t' + restore + ' [0] speed (([%.6f]*100)/MOVESCALE) / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
+
             outf.write('}\n')
 
         if ISWALK and VARIABLESPEED:
