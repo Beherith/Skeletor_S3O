@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 3, 3),
+    "version": (0, 3, 4),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -886,7 +886,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 cmdline = cmdline + '/ animspeed'
             cmdline = cmdline + '; '
             if delta != 0:
-                cmdline = cmdline + '//delta=%.2f'
+                cmdline = cmdline + '//delta=%.2f'%delta
             return cmdline
         
         newfile_name = filepath + ".bos_export.txt"
