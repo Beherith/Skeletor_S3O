@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 3, 4),
+    "version": (0, 3, 5),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -883,7 +883,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             else:
                 cmdline = cmdline + move_variable % speed + ' '
             if variablespeed:
-                cmdline = cmdline + '/ animspeed'
+                cmdline = cmdline + '/ animSpeed'
             cmdline = cmdline + '; '
             if delta != 0:
                 cmdline = cmdline + '//delta=%.2f'%delta
@@ -893,9 +893,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf = open(newfile_name, 'w')
         outf.write("// " + INFOSTRING + '\n')
         if VARIABLESCALE:
-            outf.write("#define MOVESCALE 100\n")
+            outf.write("#define MOVESCALE 100 \\Higher values are bigger, 100 is default\n")
         if VARIABLEAMPLITUDE:
-            outf.write("static-var animAmplitude;\n")
+            outf.write("static-var animAmplitude; \\Higher values are bigger, 100 is default\n")
         if ISWALK and VARIABLESPEED:
             outf.write(
                 "// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
