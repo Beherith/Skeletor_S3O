@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 3, 5),
+    "version": (0, 3, 6),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -893,9 +893,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf = open(newfile_name, 'w')
         outf.write("// " + INFOSTRING + '\n')
         if VARIABLESCALE:
-            outf.write("#define MOVESCALE 100 \\Higher values are bigger, 100 is default\n")
+            outf.write("#define MOVESCALE 100 //Higher values are bigger, 100 is default\n")
         if VARIABLEAMPLITUDE:
-            outf.write("static-var animAmplitude; \\Higher values are bigger, 100 is default\n")
+            outf.write("static-var animAmplitude; //Higher values are bigger, 100 is default\n")
         if ISWALK and VARIABLESPEED:
             outf.write(
                 "// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
@@ -918,7 +918,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         stopwalking_maxspeed = {}  # dict of of bos commands, with max velocity in it to define the stopwalking function
         firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
         if ISWALK:
-            outf.write("Walk() {// %s \n\t//set-signal-mask SIG_WALK;\n" % (INFOSTRING))
+            outf.write("Walk() {// %s \n\tset-signal-mask SIG_WALK;\n" % (INFOSTRING))
         elif ISDEATH:
             outf.write(
                 "//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
