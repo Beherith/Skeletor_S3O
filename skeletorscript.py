@@ -10,7 +10,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http:-- www.gnu.org/licenses/>.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
@@ -20,8 +20,8 @@ bl_info = {
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
     "warning": "I have no idea what im doing",
-    "wiki_url": "https:-- github.com/Beherith/Skeletor_S3O",
-    "tracker_url": "http:-- springrts.com",
+    "wiki_url": "https://github.com/Beherith/Skeletor_S3O",
+    "tracker_url": "http://springrts.com",
     "support": "COMMUNITY",
     "category": "Rigging",
 }
@@ -419,7 +419,7 @@ class SkeletorOperator(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         
         print("====Looking for mirrorable pieces===")
-        # to enable : https:-- blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
+        # to enable : https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
         # rootpiece.recurseleftrightbones()
         for name, piece in pieces.items():
             piece.bonename = name
@@ -546,7 +546,7 @@ class SkeletorOperator(bpy.types.Operator):
                 armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99  # avoids having to create knee poles
         
         print("=====Parenting meshes to bones=======")
-        # getting desperate here: https:-- blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
+        # getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
         for name, piece in pieces.items():
             if piece.isAimXY:
                 continue
@@ -685,11 +685,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
         turn_variable = 'math.rad(%.6f)'
         
         if VARIABLESCALE:
-            move_variable = "((" + move_variable + " *MOVESCALE)/100)"
+            move_variable = "((" + move_variable + " *MOVESCALE) / 100)"
         
         if VARIABLEAMPLITUDE:
-            move_variable = "((" + move_variable + " *animAmplitude)/100)"
-            turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
+            move_variable = "((" + move_variable + " * animAmplitude) / 100)"
+            turn_variable = "((" + turn_variable + " * animAmplitude) / 100)"
         # things I know:
         # curves contain the needed location data
         # pose bones matrices contain the needed rotation data
@@ -859,7 +859,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         filepath = bpy.data.filepath
         print(filepath)
         
-        INFOSTRING = "For %s Created by https:-- github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
+        INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
         
         AXES = 'XZY'
         BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
@@ -894,13 +894,13 @@ class SkeletorBOSMaker(bpy.types.Operator):
         if VARIABLESCALE:
             outf.write("local MOVESCALE = 100 -- Higher values are bigger, 100 is default\n")
         if VARIABLEAMPLITUDE:
-            outf.write("local animAmplitude; -- Higher values are bigger, 100 is default\n")
+            outf.write("local animAmplitude = 100 -- Higher values are bigger, 100 is default\n")
         if ISWALK and VARIABLESPEED:
             outf.write(
                 "-- this animation uses the var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
-            outf.write("local animSpeed, maxSpeed, animFramesPerKeyframe, bMoving;\nlocal SIG_WALK = 4\n")
+            outf.write("local animSpeed, maxSpeed, animFramesPerKeyframe, bMoving\nlocal SIG_WALK = 4\n")
         elif not ISDEATH:
-            outf.write("local bAnimate;\n")
+            outf.write("local bAnimate\n")
         
         animSpeed = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
         animFPK = 4
@@ -917,7 +917,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         stopwalking_maxspeed = {}  # dict of of bos commands, with max velocity in it to define the stopwalking function
         firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
         if ISWALK:
-            outf.write("local function Walk()-- %s \n\tSetSignalMask(SIG_WALK)\n" % (INFOSTRING))
+            outf.write("local function Walk()-- %s \n\tSignal(SIG_WALK)\n\tSetSignalMask(SIG_WALK)\n" % (INFOSTRING))
         elif ISDEATH:
             # TODO
             outf.write(
@@ -1030,7 +1030,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             value,
                             abs(value - prevvalue) * fps if VARIABLESPEED else abs(value - prevvalue) / sleeptime,
                             variablespeed=VARIABLESPEED,
-                            indents=3,
+                            indents=2 if firststep else 3,
                             delta=value - prevvalue
                         )
                         
@@ -1049,9 +1049,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
             if frame_index > 0:
                 
                 if VARIABLESPEED:
-                    outf.write('\t\t\tSleep((33*animSpeed) -1)\n')
+                    outf.write('\t' if firststep else '\t\t')
+                    outf.write('\tSleep((33*animSpeed) -1)\n')
                 else:
-                    outf.write('\t\tSleep(%i)\n' % (33 * keyframe_delta - 1))
+                    outf.write('\t' if firststep else '\t\t')
+                    outf.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
                 
                 if firststep:
                     outf.write("\tend\n")
@@ -1066,11 +1068,18 @@ class SkeletorBOSMaker(bpy.types.Operator):
         outf.write('end\n')
         
         if not ISDEATH:
+            suffix = ' / animSpeed)\n' if VARIABLESPEED else ')\n'
             if ISWALK:
-                outf.write(
-                    '--  Call this from MotionControl()!\nlocal function StopWalking()\n\tanimSpeed = 10; -- tune restore speed here, higher values are slower restore speeds\n')
+                if VARIABLESPEED:
+                    outf.write('\n-- Call this from MotionControl()!')
+                outf.write('\n')
+                outf.write('local function StopWalking()\n')
+                if VARIABLESPEED:
+                    outf.write('\tanimSpeed = 10; -- tune restore speed here, higher values are slower restore speeds')
             else:
-                outf.write('--  Call this from MotionControl()!\nStopAnimation()\n')
+                if VARIABLESPEED:
+                    outf.write('-- Call this from MotionControl()!')
+                outf.write('local function StopAnimation()')
             for restore in sorted(stopwalking_maxspeed.keys()):
                 if FIRSTFRAMESTANCE:
                     stance_position = 0
@@ -1080,50 +1089,51 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         print("Stance key %s not found in %s" % (restore, firstframestance_positions))
                     if restore.startswith('Turn'):
                         outf.write(
-                            '\t' + restore + ', math.rad(%.6f), math.rad(%.6f) / animSpeed )\n' % (
-                                stance_position, stopwalking_maxspeed[restore] * 10))
+                            '\t' + restore + ', math.rad(%.6f), math.rad(%.6f)' % (
+                                stance_position, stopwalking_maxspeed[restore] * 10) + suffix)
                     if restore.startswith('Move'):
                         if VARIABLESCALE:
                             outf.write(
-                                '\t' + restore + ', (%.6f * MOVESCALE) / 100, ((%.6f * MOVESCALE)/100) / animSpeed )\n' % (
-                                    stance_position, stopwalking_maxspeed[restore] * 10))
+                                '\t' + restore + ', (%.6f * MOVESCALE) / 100, ((%.6f * MOVESCALE)/100)' % (
+                                    stance_position, stopwalking_maxspeed[restore] * 10)  + suffix)
                         else:
                             outf.write(
-                                '\t' + restore + ', %.6f, %.6f / animSpeed )\n' % (
-                                    stance_position, stopwalking_maxspeed[restore] * 10))
+                                '\t' + restore + ', %.6f, %.6f' % (
+                                    stance_position, stopwalking_maxspeed[restore] * 10)  + suffix)
                 else:
                     if restore.startswith('Turn'):
+                        # TODO: test this
                         outf.write(
-                            '\t' + restore + ' 0, math.rad(%.6f) / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
+                            '\t' + restore + ', 0, math.rad(%.6f)' % (stopwalking_maxspeed[restore] * 10) + suffix)
                     if restore.startswith('Move'):
                         if VARIABLESCALE:
-                            outf.write('\t' + restore + '( 0, %.6f / animSpeed )\n' % (
-                                    stopwalking_maxspeed[restore] * 10))
+                            outf.write('\t' + restore + ', 0, ((%.6f * MOVESCALE) / 100)' % (
+                                    stopwalking_maxspeed[restore] * 10) + suffix)
                         else:
-                            outf.write('\t' + restore + '( 0, ((%.6f * MOVESCALE) / 100) / animSpeed )\n' % (
-                                    stopwalking_maxspeed[restore] * 10))
+                            outf.write('\t' + restore + ', 0, %.6f' % (
+                                    stopwalking_maxspeed[restore] * 10) + suffix)
             
             outf.write('end\n')
         
         if ISWALK and VARIABLESPEED:
             outf.write('--  REMEMBER TO animspeed = %i in Create() !!\n' % animFPK)
-            outf.write('UnitSpeed()\n')
+            outf.write('local function UnitSpeed()\n')
             outf.write('\tmaxSpeed = GetUnitValue(COB.MAX_SPEED); --  this returns cob units per frame i think\n')
             outf.write(
                 '\tanimFramesPerKeyframe = %i; -- we need to calc the frames per keyframe value, from the known animtime\n' % animFPK)
             outf.write('\tmaxSpeed = maxSpeed + (maxSpeed /(2*animFramesPerKeyframe)); --  add fudge\n')
             outf.write('\twhile (true) do\n')
             outf.write('\t\tanimSpeed = GetUnitValue(COB.CURRENT_SPEED)\n')
-            outf.write('\t\tif (animSpeed<1) animSpeed = 1\n')
+            outf.write('\t\tif (animSpeed < 1) then animSpeed = 1 end\n')
             outf.write('\t\tanimSpeed = (maxSpeed * %i) / animSpeed \n' % animFPK)
             outf.write(
                 '\t\t-- get PRINT(maxSpeed, animFramesPerKeyframe, animSpeed); -- how to print debug info from bos\n')
-            outf.write('\t\tif (animSpeed<%i) animSpeed=%i;\n' % (int(animFPK / 2), int(animFPK / 2)))
-            outf.write('\t\tif (animspeed>%i) animSpeed = %i;\n' % (animFPK * 2, animFPK * 2))
-            outf.write('\t\tsleep()%i)\n' % (33 * animFPK - 1))
+            outf.write('\t\tif (animSpeed < %i) then animSpeed=%i end\n' % (int(animFPK / 2), int(animFPK / 2)))
+            outf.write('\t\tif (animspeed > %i) then animSpeed = %i end\n' % (animFPK * 2, animFPK * 2))
+            outf.write('\t\tsleep(%i)\n' % (33 * animFPK - 1))
             outf.write('\tend\nend\n')
-            outf.write('function script.StartMoving()\n\tSignal(SIG_WALK)\n\tbMoving = true;\n\tstartThread(Walk)\nend\n')
-            outf.write('function script.StopMoving()\n\tSignal(SIG_WALK)\n\tbMoving = false;\n\tStopWalking()\nend\n')
+            outf.write('\nfunction script.StartMoving()\n\tSignal(SIG_WALK)\n\tbMoving = true\n\tstartThread(Walk)\nend\n')
+            outf.write('\nfunction script.StopMoving()\n\tSignal(SIG_WALK)\n\tbMoving = false\n\tStopWalking()\nend\n')
         
         outf.close()
         print("Done writing bos!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
