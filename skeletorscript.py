@@ -898,7 +898,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
         if ISWALK and VARIABLESPEED:
             outf.write(
                 "-- this animation uses the var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
-            outf.write("local animSpeed, maxSpeed, animFramesPerKeyframe, bMoving\nlocal SIG_WALK = 4\n")
+            outf.write("local animSpeed, maxSpeed, animFramesPerKeyframe, walking\nlocal SIG_WALK = 4\n")
+        elif ISWALK:
+            outf.write("local walking")
         elif not ISDEATH:
             outf.write("local bAnimate\n")
         
@@ -946,12 +948,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
             
             if frame_index > 0:
                 if firststep:
-                    outf.write("\tif bMoving then -- Frame:%i\n" % frame_time)
+                    outf.write("\t-- Frame:%i\n" % frame_time)
                 else:
                     if ISWALK:
-                        outf.write("\t\tif bMoving then -- Frame:%i\n" % frame_time)
+                        outf.write("\t\t-- Frame:%i\n" % frame_time)
                     elif ISDEATH:
-                        outf.write("\t\tif TRUE then -- Frame:%i\n" % frame_time)
+                        outf.write("\t\t-- Frame:%i\n" % frame_time)
                     else:
                         outf.write("\t\tif bAnimate then -- Frame:%i\n" % frame_time)
             
@@ -1030,7 +1032,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             value,
                             abs(value - prevvalue) * fps if VARIABLESPEED else abs(value - prevvalue) / sleeptime,
                             variablespeed=VARIABLESPEED,
-                            indents=2 if firststep else 3,
+                            indents=1 if firststep else 2,
                             delta=value - prevvalue
                         )
                         
@@ -1050,17 +1052,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 
                 if VARIABLESPEED:
                     outf.write('\t' if firststep else '\t\t')
-                    outf.write('\tSleep((33*animSpeed) -1)\n')
+                    outf.write('Sleep((33 * animSpeed) -1)\n')
                 else:
                     outf.write('\t' if firststep else '\t\t')
-                    outf.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
+                    outf.write('Sleep(%i)\n' % (33 * keyframe_delta - 1))
                 
                 if firststep:
-                    outf.write("\tend\n")
-                    outf.write("\twhile (bMoving) do\n")
+                    outf.write("\twhile true do\n")
                     firststep = False
-                else:
-                    outf.write('\t\tend\n')
         
         if ISWALK:
             outf.write('\tend\n')
@@ -1073,12 +1072,16 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 if VARIABLESPEED:
                     outf.write('\n-- Call this from MotionControl()!')
                 outf.write('\n')
-                outf.write('local function StopWalking()\n')
+                outf.write("""
+local function StopWalking()
+	Signal(SIG_WALK)
+	SetSignalMask(SIG_WALK)
+""")
                 if VARIABLESPEED:
-                    outf.write('\tanimSpeed = 10; -- tune restore speed here, higher values are slower restore speeds')
+                    outf.write('\tanimSpeed = 10; -- tune restore speed here, higher values are slower restore speeds\n')
             else:
                 if VARIABLESPEED:
-                    outf.write('-- Call this from MotionControl()!')
+                    outf.write('-- Call this from MotionControl()!\n')
                 outf.write('local function StopAnimation()')
             for restore in sorted(stopwalking_maxspeed.keys()):
                 if FIRSTFRAMESTANCE:
@@ -1102,7 +1105,6 @@ class SkeletorBOSMaker(bpy.types.Operator):
                                     stance_position, stopwalking_maxspeed[restore] * 10)  + suffix)
                 else:
                     if restore.startswith('Turn'):
-                        # TODO: test this
                         outf.write(
                             '\t' + restore + ', 0, math.rad(%.6f)' % (stopwalking_maxspeed[restore] * 10) + suffix)
                     if restore.startswith('Move'):
@@ -1122,7 +1124,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write(
                 '\tanimFramesPerKeyframe = %i; -- we need to calc the frames per keyframe value, from the known animtime\n' % animFPK)
             outf.write('\tmaxSpeed = maxSpeed + (maxSpeed /(2*animFramesPerKeyframe)); --  add fudge\n')
-            outf.write('\twhile (true) do\n')
+            outf.write('\twhile true do\n')
             outf.write('\t\tanimSpeed = GetUnitValue(COB.CURRENT_SPEED)\n')
             outf.write('\t\tif (animSpeed < 1) then animSpeed = 1 end\n')
             outf.write('\t\tanimSpeed = (maxSpeed * %i) / animSpeed \n' % animFPK)
@@ -1132,8 +1134,20 @@ class SkeletorBOSMaker(bpy.types.Operator):
             outf.write('\t\tif (animspeed > %i) then animSpeed = %i end\n' % (animFPK * 2, animFPK * 2))
             outf.write('\t\tsleep(%i)\n' % (33 * animFPK - 1))
             outf.write('\tend\nend\n')
-            outf.write('\nfunction script.StartMoving()\n\tSignal(SIG_WALK)\n\tbMoving = true\n\tstartThread(Walk)\nend\n')
-            outf.write('\nfunction script.StopMoving()\n\tSignal(SIG_WALK)\n\tbMoving = false\n\tStopWalking()\nend\n')
+            outf.write("""
+function script.StartMoving()
+	if not walking then
+		walking = true
+		StartThread(Walk)
+	end
+end
+""")
+            outf.write("""
+function script.StopMoving()
+    walking = false
+    StopWalking()
+end
+""")
         
         outf.close()
         print("Done writing bos!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
