@@ -948,14 +948,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
             
             if frame_index > 0:
                 if firststep:
-                    outf.write("\t-- Frame:%i\n" % frame_time)
+                    outf.write("\tif walking then\n\t\t-- Frame:%i\n" % frame_time)
                 else:
                     if ISWALK:
                         outf.write("\t\t-- Frame:%i\n" % frame_time)
                     elif ISDEATH:
                         outf.write("\t\t-- Frame:%i\n" % frame_time)
                     else:
-                        outf.write("\t\tif bAnimate then -- Frame:%i\n" % frame_time)
+                        outf.write("\tif bAnimate then -- Frame:%i\n" % frame_time)
             
             for bone_name in sorted(thisframe.keys()):
                 bone_motions = thisframe[bone_name]
@@ -1032,7 +1032,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             value,
                             abs(value - prevvalue) * fps if VARIABLESPEED else abs(value - prevvalue) / sleeptime,
                             variablespeed=VARIABLESPEED,
-                            indents=1 if firststep else 2,
+                            indents=2,
                             delta=value - prevvalue
                         )
                         
@@ -1051,14 +1051,13 @@ class SkeletorBOSMaker(bpy.types.Operator):
             if frame_index > 0:
                 
                 if VARIABLESPEED:
-                    outf.write('\t' if firststep else '\t\t')
-                    outf.write('Sleep((33 * animSpeed) -1)\n')
+                    outf.write('\t\tSleep((33 * animSpeed) -1)\n')
                 else:
-                    outf.write('\t' if firststep else '\t\t')
-                    outf.write('Sleep(%i)\n' % (33 * keyframe_delta - 1))
+                    outf.write('\t\tSleep(%i)\n' % (33 * keyframe_delta - 1))
                 
                 if firststep:
-                    outf.write("\twhile true do\n")
+                    outf.write("\tend\n")
+                    outf.write("\twhile walking do\n")
                     firststep = False
         
         if ISWALK:
