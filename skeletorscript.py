@@ -26,7 +26,7 @@ bl_info = {
     "category": "Rigging",
 }
 import bpy
-from math import pi, degrees
+from math import pi, degrees, radians
 from mathutils import Vector, Euler, Matrix
 import os
 import sys
@@ -682,7 +682,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
         
         move_variable = '%.6f'
-        turn_variable = 'math.rad(%.6f)'
+        turn_variable = '%.6f'
         
         if VARIABLESCALE:
             move_variable = "((" + move_variable + " *MOVESCALE) / 100)"
@@ -868,17 +868,17 @@ class SkeletorBOSMaker(bpy.types.Operator):
         def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
                               delta=0):
             axisname = BOSAXIS[axisindex]
-            targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex],
+            targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex]
             cmdline = '' + '\t' * indents
             cmdline = cmdline + turn_or_move + '('
             cmdline = cmdline + bonename + ', '
             cmdline = cmdline + axisname + ', '
             if turn_or_move == 'Turn':
-                cmdline = cmdline + turn_variable % targetposition + ', '
+                cmdline = cmdline + turn_variable % radians(targetposition) + ', '
             else:
                 cmdline = cmdline + move_variable % targetposition + ', '
             if turn_or_move == 'Turn':
-                cmdline = cmdline + turn_variable % speed + ' '
+                cmdline = cmdline + turn_variable % radians(speed) + ' '
             else:
                 cmdline = cmdline + move_variable % speed + ' '
             if variablespeed:
@@ -921,13 +921,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
         if ISWALK:
             outf.write("local function Walk()-- %s \n\tSignal(SIG_WALK)\n\tSetSignalMask(SIG_WALK)\n" % (INFOSTRING))
         elif ISDEATH:
-            # TODO
+            # TODO for death animations:
+            # turn values and speeds probably need to be converted to radians
             outf.write(
                 "-- use call-script DeathAnim(); from Killed()\nDeathAnim() {--  %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
                     INFOSTRING))
         else:
             outf.write("-- start-script Animate(); -- from RestoreAfterDelay\n")
-            # TODO
+            # TODO not walk scripts
             outf.write(
                 "Animate() -- %s \n\tset-signal-mask SIG_WALK | SIG_AIM; -- you might need this\n\tSleep(100*RAND(30,256)) -- sleep between 3 and 25.6 seconds\n\tbAnimate = TRUE;\n" % (
                     INFOSTRING))
@@ -948,6 +949,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
             
             if frame_index > 0:
                 if firststep:
+                    # can remove
                     outf.write("\tif walking then\n\t\t-- Frame:%i\n" % frame_time)
                 else:
                     if ISWALK:
@@ -960,8 +962,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
             for bone_name in sorted(thisframe.keys()):
                 bone_motions = thisframe[bone_name]
                 rotations_sum = 0
-                
+
                 for axis, value in bone_motions.items():
+                    if not axis.startswith(('location', 'rot')):
+                        print("Warning: Keyframe for something other than location or rotation")
+                        continue
                     # find previous value
                     # TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
                     # handle separately for idle anims, as they dont require accurate keyframe reinterpolation
@@ -1030,7 +1035,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
                             bone_name,
                             axis_index,
                             value,
-                            abs(value - prevvalue) * fps if VARIABLESPEED else abs(value - prevvalue) / sleeptime,
+                            abs(value - prevvalue) * fps if VARIABLESPEED else maxvelocity,
                             variablespeed=VARIABLESPEED,
                             indents=2,
                             delta=value - prevvalue
@@ -1057,7 +1062,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
                 
                 if firststep:
                     outf.write("\tend\n")
-                    outf.write("\twhile walking do\n")
+                    outf.write("\twhile true do\n")
+                    outf.write("\t\tanimSpeed = GetSpeedMod()\n")
                     firststep = False
         
         if ISWALK:
@@ -1075,6 +1081,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 local function StopWalking()
 	Signal(SIG_WALK)
 	SetSignalMask(SIG_WALK)
+
 """)
                 if VARIABLESPEED:
                     outf.write('\tanimSpeed = 10; -- tune restore speed here, higher values are slower restore speeds\n')
@@ -1091,8 +1098,8 @@ local function StopWalking()
                         print("Stance key %s not found in %s" % (restore, firstframestance_positions))
                     if restore.startswith('Turn'):
                         outf.write(
-                            '\t' + restore + ', math.rad(%.6f), math.rad(%.6f)' % (
-                                stance_position, stopwalking_maxspeed[restore] * 10) + suffix)
+                            '\t' + restore + ', %.6f, %.6f' % (
+                                radians(stance_position), radians(stopwalking_maxspeed[restore] * 10)) + suffix)
                     if restore.startswith('Move'):
                         if VARIABLESCALE:
                             outf.write(
@@ -1105,7 +1112,7 @@ local function StopWalking()
                 else:
                     if restore.startswith('Turn'):
                         outf.write(
-                            '\t' + restore + ', 0, math.rad(%.6f)' % (stopwalking_maxspeed[restore] * 10) + suffix)
+                            '\t' + restore + ', 0, %.6f' % (radians(stopwalking_maxspeed[restore]) * 10) + suffix)
                     if restore.startswith('Move'):
                         if VARIABLESCALE:
                             outf.write('\t' + restore + ', 0, ((%.6f * MOVESCALE) / 100)' % (
