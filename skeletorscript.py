@@ -111,6 +111,8 @@ class Skelepanel(bpy.types.Panel):
         layout.prop(mytool, "is_death", text="Is Death Script")
         row = layout.row()
         row.operator('skele.skeletorbosmaker', text='2. Create BOS')
+        row = layout.row()
+        row.operator('skele.skeletorlusmaker', text='2b. Create LUS')
 
 
 class S3opiece:
@@ -1161,12 +1163,21 @@ end
         print("boneswithcurves:", boneswithcurves)
 
 
+
+class SkeletorLUSMaker(SkeletorBOSMaker):
+    bl_idname = "skele.skeletorlusmaker"
+    bl_label = "skeletor_lusmaker"
+    bl_description = "Writes *_lua_export.lua next to .blend file"
+    bl_options = {'REGISTER', 'UNDO'}
+
+
 def register():
     bpy.utils.register_class(MySettings)
     bpy.types.Scene.my_tool = PointerProperty(type=MySettings)
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
     bpy.utils.register_class(SkeletorBOSMaker)
+    bpy.utils.register_class(SkeletorLUSMaker)
     bpy.utils.register_class(Skelepanel)
     bpy.utils.register_class(SimpleBoneAnglesPanel)
 
@@ -1176,6 +1187,7 @@ def unregister():
     bpy.utils.unregister_class(MySettings)
     bpy.utils.unregister_class(SkeletorRotator)
     bpy.utils.unregister_class(SkeletorBOSMaker)
+    bpy.utils.unregister_class(SkeletorLUSMaker)
     bpy.utils.unregister_class(Skelepanel)
     bpy.utils.unregister_class(SimpleBoneAnglesPanel)
     del bpy.types.Scene.my_tool
