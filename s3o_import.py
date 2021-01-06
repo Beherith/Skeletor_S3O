@@ -290,7 +290,10 @@ class s3o_piece(object):
                 bm.verts.ensure_lookup_table()
                 bm.verts[-1].normal = Vector((v.xnormal, v.ynormal, v.znormal))
             for f in self.faces:
-                bm.faces.new([bm.verts[self.vertids[i]] for i in f])
+                try:
+                    bm.faces.new([bm.verts[self.vertids[i]] for i in f])
+                except ValueError:
+                    pass
                 bm.faces.ensure_lookup_table()
                 uv_layer = bm.loops.layers.uv.verify()
                 for i, loop in enumerate(bm.faces[-1].loops):
