@@ -662,7 +662,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print("SkeletorBOSMaker.init")
         self.whichframe = 0
     
-    # @staticmethod
+	# @staticmethod
     def tobos(self, context):
         print("MAKING BOS, BOSS")
         scene = context.scene
@@ -851,7 +851,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print(filepath)
 
         INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
-
+        
         ISWALK = context.scene.my_tool.is_walk
         ISDEATH = context.scene.my_tool.is_death
         VARIABLESPEED = context.scene.my_tool.varspeed
@@ -1215,16 +1215,16 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 local walking = false -- prevent script.StartMoving from spamming threads if already walking
 
 local function GetSpeedParams()
-    local attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
-    if attMod <= 0 then
-        return 0, 300
-    end
-    local sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
-    if sleepFrames < 1 then
-        sleepFrames = 1	
-    end
-    local speedMod = 1 / sleepFrames
-    return speedMod, 33*sleepFrames
+	local attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
+	if attMod <= 0 then
+		return 0, 300
+	end
+	local sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
+	if sleepFrames < 1 then
+		sleepFrames = 1	
+	end
+	local speedMod = 1 / sleepFrames
+	return speedMod, 33*sleepFrames
 end
 """)
         elif ISWALK:
@@ -1249,9 +1249,9 @@ end
         if ISWALK:
             outf.write("""
 local function Walk()
-    Signal(SIG_WALK)
-    SetSignalMask(SIG_WALK)
-    local speedMult, sleepTime = GetSpeedParams()
+	Signal(SIG_WALK)
+	SetSignalMask(SIG_WALK)
+	local speedMult, sleepTime = GetSpeedParams()
 """)
         elif ISDEATH:
             # TODO for death animations:
@@ -1264,8 +1264,8 @@ local function Walk()
             # TODO not walk scripts
             outf.write("""
 local function Animate() -- %s
-    SetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
-    Sleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
+	SetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+	Sleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 """ % INFOSTRING)
         
         firststep = True
@@ -1479,8 +1479,8 @@ def register():
     bpy.types.Scene.my_tool = PointerProperty(type=MySettings)
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
-    bpy.utils.register_class(SkeletorBOSMaker)
     bpy.utils.register_class(SkeletorLUSMaker)
+    bpy.utils.register_class(SkeletorBOSMaker)
     bpy.utils.register_class(Skelepanel)
     bpy.utils.register_class(SimpleBoneAnglesPanel)
 
@@ -1489,8 +1489,8 @@ def unregister():
     bpy.utils.unregister_class(SkeletorOperator)
     bpy.utils.unregister_class(MySettings)
     bpy.utils.unregister_class(SkeletorRotator)
-    bpy.utils.unregister_class(SkeletorBOSMaker)
     bpy.utils.unregister_class(SkeletorLUSMaker)
+    bpy.utils.unregister_class(SkeletorBOSMaker)
     bpy.utils.unregister_class(Skelepanel)
     bpy.utils.unregister_class(SimpleBoneAnglesPanel)
     del bpy.types.Scene.my_tool
