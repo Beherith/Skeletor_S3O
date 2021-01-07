@@ -662,7 +662,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print("SkeletorBOSMaker.init")
         self.whichframe = 0
     
-	# @staticmethod
+	 # @staticmethod
     def tobos(self, context):
         print("MAKING BOS, BOSS")
         scene = context.scene
@@ -1165,8 +1165,8 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
         VARIABLESCALE = context.scene.my_tool.varscale
         VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
         
-        move_variable = '[%.6f]'
-        turn_variable = '<%.6f>'
+        move_variable = '%.6f'
+        turn_variable = '%.6f'
         
         if VARIABLESCALE:
             move_variable = "((" + move_variable + " *MOVESCALE)/100)"
