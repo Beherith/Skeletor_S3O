@@ -662,7 +662,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         print("SkeletorBOSMaker.init")
         self.whichframe = 0
     
-	 # @staticmethod
+    # @staticmethod
     def tobos(self, context):
         print("MAKING BOS, BOSS")
         scene = context.scene
@@ -1215,16 +1215,16 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 local walking = false -- prevent script.StartMoving from spamming threads if already walking
 
 local function GetSpeedParams()
-	local attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
-	if attMod <= 0 then
-		return 0, 300
-	end
-	local sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
-	if sleepFrames < 1 then
-		sleepFrames = 1	
-	end
-	local speedMod = 1 / sleepFrames
-	return speedMod, 33*sleepFrames
+\tlocal attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
+\tif attMod <= 0 then
+\t\treturn 0, 300
+\tend
+\tlocal sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
+\tif sleepFrames < 1 then
+\t\tsleepFrames = 1
+\tend
+\tlocal speedMod = 1 / sleepFrames
+\treturn speedMod, 33*sleepFrames
 end
 """)
         elif ISWALK:
@@ -1249,9 +1249,9 @@ end
         if ISWALK:
             outf.write("""
 local function Walk()
-	Signal(SIG_WALK)
-	SetSignalMask(SIG_WALK)
-	local speedMult, sleepTime = GetSpeedParams()
+\tSignal(SIG_WALK)
+\tSetSignalMask(SIG_WALK)
+\tlocal speedMult, sleepTime = GetSpeedParams()
 """)
         elif ISDEATH:
             # TODO for death animations:
@@ -1264,8 +1264,8 @@ local function Walk()
             # TODO not walk scripts
             outf.write("""
 local function Animate() -- %s
-	SetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
-	Sleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
+\tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+\tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 """ % INFOSTRING)
         
         firststep = True
