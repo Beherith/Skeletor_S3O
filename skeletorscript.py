@@ -15,7 +15,7 @@
 bl_info = {
     "name": "Skeletor_S3O SpringRTS (.s3o)",
     "author": "Beherith  <mysterme@gmail.com>",
-    "version": (0, 3, 6),
+    "version": (0, 3, 7),
     "blender": (2, 80, 0),
     "location": "3D View > Side panel",
     "description": "Create a Skeleton and a BOS for a SpringRTS",
