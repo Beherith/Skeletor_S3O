@@ -21,7 +21,7 @@ bl_info = {
     "description": "Create a Skeleton and a BOS for a SpringRTS",
     "warning": "I have no idea what im doing",
     "wiki_url": "https://github.com/Beherith/Skeletor_S3O",
-    "tracker_url": "http://springrts.com",
+    "tracker_url": "https://github.com/Beherith/Skeletor_S3O",
     "support": "COMMUNITY",
     "category": "Rigging",
 }
