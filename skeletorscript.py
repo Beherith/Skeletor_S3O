@@ -26,7 +26,7 @@ bl_info = {
     "category": "Rigging",
 }
 import bpy
-from math import pi, degrees
+from math import pi, degrees, radians
 from mathutils import Vector, Euler, Matrix
 import os
 import sys
@@ -111,6 +111,8 @@ class Skelepanel(bpy.types.Panel):
         layout.prop(mytool, "is_death", text="Is Death Script")
         row = layout.row()
         row.operator('skele.skeletorbosmaker', text='2. Create BOS')
+        row = layout.row()
+        row.operator('skele.skeletorlusmaker', text='2b. Create LUS')
 
 
 class S3opiece:
@@ -672,24 +674,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
         props = {"location": "move", "rotation_euler": "turn"}
         boneswithcurves = []
         bonesinIKchains = []
-        explodedpieces = []
         piecehierarchy = {}  # for each bone, list its children.
-        ISWALK = context.scene.my_tool.is_walk
-        ISDEATH = context.scene.my_tool.is_death
-        VARIABLESPEED = context.scene.my_tool.varspeed
-        FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
-        VARIABLESCALE = context.scene.my_tool.varscale
-        VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
-        
-        move_variable = '[%.6f]'
-        turn_variable = '<%.6f>'
-        
-        if VARIABLESCALE:
-            move_variable = "((" + move_variable + " *MOVESCALE)/100)"
-        
-        if VARIABLEAMPLITUDE:
-            move_variable = "((" + move_variable + " *animAmplitude)/100)"
-            turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
         # things I know:
         # curves contain the needed location data
         # pose bones matrices contain the needed rotation data
@@ -847,6 +832,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
                         animframes[frame_time][bone_name]['rot' + str(axis)] = degrees(value)
         
         print("Animframes:", animframes)
+        self.write_file(context=context, animframes=animframes, piecehierarchy=piecehierarchy)
+        print("bonesinIKchains:", bonesinIKchains)
+        print("boneswithcurves:", boneswithcurves)
+
+    def write_file(self, context, animframes, piecehierarchy):        
         fps = 30.0
         move_turn_miniumum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
         sleepperframe = 1.0 / fps
@@ -855,11 +845,29 @@ class SkeletorBOSMaker(bpy.types.Operator):
         # simplify mini rots and mini moves
         # the first frame can be ignored
         keyframe_times = sorted(animframes.keys())
+        explodedpieces = []
         
         filepath = bpy.data.filepath
         print(filepath)
-        
+
         INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
+        
+        ISWALK = context.scene.my_tool.is_walk
+        ISDEATH = context.scene.my_tool.is_death
+        VARIABLESPEED = context.scene.my_tool.varspeed
+        FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
+        VARIABLESCALE = context.scene.my_tool.varscale
+        VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
+        
+        move_variable = '[%.6f]'
+        turn_variable = '<%.6f>'
+        
+        if VARIABLESCALE:
+            move_variable = "((" + move_variable + " *MOVESCALE)/100)"
+        
+        if VARIABLEAMPLITUDE:
+            move_variable = "((" + move_variable + " *animAmplitude)/100)"
+            turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
         
         AXES = 'XZY'
         BOSAXIS = ['x-axis', 'z-axis', 'y-axis']
@@ -1126,8 +1134,344 @@ class SkeletorBOSMaker(bpy.types.Operator):
         
         outf.close()
         print("Done writing bos!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
-        print("bonesinIKchains:", bonesinIKchains)
-        print("boneswithcurves:", boneswithcurves)
+
+
+class SkeletorLUSMaker(SkeletorBOSMaker):
+    bl_idname = "skele.skeletorlusmaker"
+    bl_label = "skeletor_lusmaker"
+    bl_description = "Writes *_lua_export.lua next to .blend file"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def write_file(self, context, animframes, piecehierarchy):
+        fps = 30.0
+        move_turn_miniumum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
+        sleepperframe = 1.0 / fps
+        # conversion time:
+        # output a bos script
+        # simplify mini rots and mini moves
+        # the first frame can be ignored
+        keyframe_times = sorted(animframes.keys())
+        explodedpieces = []
+        
+        filepath = bpy.data.filepath
+        print(filepath)
+        
+        INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
+
+        ISWALK = context.scene.my_tool.is_walk
+        ISDEATH = context.scene.my_tool.is_death
+        VARIABLESPEED = context.scene.my_tool.varspeed
+        FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
+        VARIABLESCALE = context.scene.my_tool.varscale
+        VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
+        
+        move_variable = '%.6f'
+        turn_variable = '%.6f'
+        
+        if VARIABLESCALE:
+            move_variable = "((" + move_variable + " *MOVESCALE)/100)"
+        
+        if VARIABLEAMPLITUDE:
+            move_variable = "((" + move_variable + " *animAmplitude)/100)"
+            turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
+
+        BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
+        blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
+        
+        def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
+                              delta=0):
+            axisname = BOSAXIS[axisindex]
+            targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex]
+            cmdline = '' + '\t' * indents
+            cmdline = cmdline + turn_or_move + '('
+            cmdline = cmdline + bonename + ', '
+            cmdline = cmdline + axisname + ', '
+            if turn_or_move == 'Turn':
+                cmdline = cmdline + turn_variable % radians(targetposition) + ', '
+            else:
+                cmdline = cmdline + move_variable % targetposition + ', '
+            if turn_or_move == 'Turn':
+                cmdline = cmdline + turn_variable % radians(speed) + ' '
+            else:
+                cmdline = cmdline + move_variable % speed + ' '
+            if variablespeed:
+                cmdline = cmdline + '* speedMult'
+            cmdline = cmdline + ') '
+            if delta != 0:
+                cmdline = cmdline + '-- delta=%.2f'%delta
+            return cmdline
+        
+        newfile_name = filepath + ".lua_export.lua"
+        outf = open(newfile_name, 'w')
+        outf.write("-- " + INFOSTRING + '\n')
+        if VARIABLESCALE:
+            outf.write("local MOVESCALE = 100 -- Higher values are bigger, 100 is default\n")
+        if VARIABLEAMPLITUDE:
+            outf.write("local animAmplitude = 100 -- Higher values are bigger, 100 is default\n")
+        if ISWALK and VARIABLESPEED:
+            outf.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
+            outf.write("local SIG_WALK = 1\n")
+            outf.write("""
+local walking = false -- prevent script.StartMoving from spamming threads if already walking
+
+local function GetSpeedParams()
+\tlocal attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
+\tif attMod <= 0 then
+\t\treturn 0, 300
+\tend
+\tlocal sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
+\tif sleepFrames < 1 then
+\t\tsleepFrames = 1
+\tend
+\tlocal speedMod = 1 / sleepFrames
+\treturn speedMod, 33*sleepFrames
+end
+""")
+        elif ISWALK:
+            outf.write("local walking")
+        elif not ISDEATH:
+            outf.write("local bAnimate\n")
+        
+        speedMult = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
+        animFPK = 4
+        if len(speedMult) == 0:
+            print("MEGA WARNING: NO DETECTABLE FRAMES!")
+            return
+        else:
+            animFPK = float(sum(speedMult)) / (len(keyframe_times) - 2)
+            if ISWALK and (animFPK - round(animFPK) > 0.00001):
+                warn = "-- Animframes spacing is %f, THIS SHOULD BE AN INTEGER, SPACE YOUR KEYFRAMES EVENLY!\n" % animFPK
+                outf.write(warn)
+                print(warn)
+        
+        stopwalking_maxspeed = {}  # dict of of bos commands, with max velocity in it to define the stopwalking function
+        firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
+        if ISWALK:
+            outf.write("""
+local function Walk()
+\tSignal(SIG_WALK)
+\tSetSignalMask(SIG_WALK)
+\tlocal speedMult, sleepTime = GetSpeedParams()
+""")
+        elif ISDEATH:
+            # TODO for death animations:
+            # turn values and speeds probably need to be converted to radians
+            outf.write(
+                "-- use call-script DeathAnim(); from Killed()\nDeathAnim() {--  %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
+                    INFOSTRING))
+        else:
+            outf.write("-- start-script Animate(); -- from RestoreAfterDelay\n")
+            # TODO not walk scripts
+            outf.write("""
+local function Animate() -- %s
+\tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+\tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
+""" % INFOSTRING)
+        
+        firststep = True
+        if not ISWALK:
+            firststep = False
+        
+        for frame_index, frame_time in enumerate(keyframe_times):
+            if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
+                continue
+            
+            thisframe = animframes[keyframe_times[frame_index]]
+            prevframe = animframes[keyframe_times[frame_index - 1]]
+            
+            keyframe_delta = keyframe_times[frame_index] - keyframe_times[frame_index - 1]
+            sleeptime = sleepperframe * keyframe_delta
+            
+            if frame_index > 0:
+                if firststep:
+                    outf.write("\n\t-- Frame: %i (first step)\n" % frame_time)
+                else:
+                    if ISWALK:
+                        outf.write("\t\t-- Frame:%i\n" % frame_time)
+                    elif ISDEATH:
+                        outf.write("\t\t-- Frame:%i\n" % frame_time)
+                    else:
+                        outf.write("\t-- Frame:%i\n" % frame_time)
+            
+            for bone_name in sorted(thisframe.keys()):
+                bone_motions = thisframe[bone_name]
+                rotations_sum = 0
+
+                for axis, value in bone_motions.items():
+                    if not axis.startswith(('location', 'rot')):
+                        print("Warning: Keyframe for something other than location or rotation")
+                        continue
+                    # find previous value
+                    # TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
+                    # handle separately for idle anims, as they dont require accurate keyframe reinterpolation
+                    sleeptime = sleepperframe * keyframe_delta
+                    prevvalue = 0
+                    prevframe = frame_index - 1
+                    foundprev = False
+                    for previous in range(frame_index - 1, -1, -1):
+                        if bone_name in animframes[keyframe_times[previous]] and axis in \
+                                animframes[keyframe_times[previous]][bone_name]:
+                            prevvalue = animframes[keyframe_times[previous]][bone_name][axis]
+                            foundprev = True
+                            prevframe = previous
+                            break
+                    if not foundprev and frame_index > 0:
+                        print("Warning: Failed to find previous position for bone", bone_name, 'axis', axis, 'frame',
+                              keyframe_times[frame_index])
+                    else:
+                        pass
+                    # sleeptime = sleepperframe * (keyframe_times[i] - keyframe_times[prevframe])
+                    
+                    axis_index = int(axis[-1])
+                    # blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
+                    if abs(value - prevvalue) < 0.1:
+                        print("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevvalue))
+                        continue
+                    else:
+                        if ISDEATH:
+                            if bone_name not in explodedpieces:
+                                if axis.startswith('location') and abs(value - prevvalue) > 100:
+                                    
+                                    def recurseexplodechildren(piece_name):
+                                        BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE|NOHEATCLOUD;\n\t\t\thide %s;\n' % (
+                                            piece_name, piece_name)
+                                        outf.write(BOS)
+                                        explodedpieces.append(piece_name)
+                                        for child in piecehierarchy[piece_name]:
+                                            recurseexplodechildren(child)
+                                    
+                                    recurseexplodechildren(bone_name)
+                                    continue
+                            else:  # this piece has already blown up, ignore it
+                                continue
+                        
+                        # bos_cmd = '\t\t\t%s %s to %s %s speed %s %s; -- delta=%.2f '
+                        turn_or_move = 'Turn'
+                        if axis.startswith('location'):  # Move
+                            turn_or_move = 'Move'
+                        stopwalking_cmd = '%s(%s, %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
+                        
+                        if FIRSTFRAMESTANCE and frame_index == 0:
+                            firstframestance_positions[stopwalking_cmd] = value * \
+                                                                          blender_to_bos_axis_multiplier[turn_or_move][
+                                                                              axis_index]
+                        
+                        maxvelocity = abs(value - prevvalue) / sleeptime
+                        if stopwalking_cmd in stopwalking_maxspeed:
+                            if maxvelocity > stopwalking_maxspeed[stopwalking_cmd]:
+                                stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
+                        else:
+                            stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
+                        rotations_sum += abs(value - prevvalue)
+                        
+                        BOS = MakeBOSLineString(
+                            turn_or_move,
+                            bone_name,
+                            axis_index,
+                            value,
+                            abs(value - prevvalue) * fps if VARIABLESPEED else maxvelocity,
+                            variablespeed=VARIABLESPEED,
+                            indents=2 if ISWALK and not firststep else 1,
+                            delta=value - prevvalue
+                        )
+                        
+                        if rotations_sum > 130:
+                            gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
+                                frame_time, bone_name)
+                            print(gwarn)
+                            BOS += '-- ' + gwarn + '\n'
+                        
+                        if not foundprev:
+                            BOS += '-- ' + "Failed to find previous position for bone" + bone_name + 'axis' + axis
+                        
+                        if frame_index > 0:
+                            outf.write(BOS + '\n')
+            
+            if frame_index > 0:
+                
+                if VARIABLESPEED:
+                    indent = '\t' if firststep else '\t\t'
+                    outf.write(indent + 'Sleep(sleepTime)\n')
+                else:
+                    outf.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
+                
+                if firststep:
+                    outf.write("\n\twhile true do\n")
+                    outf.write("\t\tspeedMult, sleepTime = GetSpeedParams()\n")
+                    firststep = False
+        
+        if ISWALK:
+            outf.write('\tend\n')
+        
+        outf.write('end\n')
+        
+        if not ISDEATH:
+            suffix = ' * speedMult)\n' if VARIABLESPEED else ')\n'
+            if ISWALK:
+                outf.write('\n')
+                outf.write("""local function StopWalking()
+    Signal(SIG_WALK)
+    SetSignalMask(SIG_WALK)
+
+""")
+                if VARIABLESPEED:
+                    outf.write('\tlocal speedMult = 0.5 * GetSpeedParams() -- slower restore speed for last step\n\n')
+            else:
+                if VARIABLESPEED:
+                    outf.write('-- Call this from MotionControl()!\n')
+                outf.write('local function StopAnimation()\n')
+            for restore in sorted(stopwalking_maxspeed.keys()):
+                if FIRSTFRAMESTANCE:
+                    stance_position = 0
+                    if restore in firstframestance_positions:
+                        stance_position = firstframestance_positions[restore]
+                    else:
+                        print("Stance key %s not found in %s" % (restore, firstframestance_positions))
+                    if restore.startswith('Turn'):
+                        outf.write(
+                            '\t' + restore + ', %.6f, %.6f' % (
+                                radians(stance_position), radians(stopwalking_maxspeed[restore] * 10)) + suffix)
+                    if restore.startswith('Move'):
+                        if VARIABLESCALE:
+                            outf.write(
+                                '\t' + restore + ', (%.6f * MOVESCALE) / 100, ((%.6f * MOVESCALE)/100)' % (
+                                    stance_position, stopwalking_maxspeed[restore] * 10)  + suffix)
+                        else:
+                            outf.write(
+                                '\t' + restore + ', %.6f, %.6f' % (
+                                    stance_position, stopwalking_maxspeed[restore] * 10)  + suffix)
+                else:
+                    if restore.startswith('Turn'):
+                        outf.write(
+                            '\t' + restore + ', 0, %.6f' % (radians(stopwalking_maxspeed[restore]) * 10) + suffix)
+                    if restore.startswith('Move'):
+                        if VARIABLESCALE:
+                            outf.write('\t' + restore + ', 0, ((%.6f * MOVESCALE) / 100)' % (
+                                    stopwalking_maxspeed[restore] * 10) + suffix)
+                        else:
+                            outf.write('\t' + restore + ', 0, %.6f' % (
+                                    stopwalking_maxspeed[restore] * 10) + suffix)
+            
+            outf.write('end\n')
+        
+        if ISWALK and VARIABLESPEED:
+            outf.write("""
+function script.StartMoving()
+    if not walking then
+        walking = true
+        StartThread(Walk)
+    end
+end
+""")
+            outf.write("""
+function script.StopMoving()
+    walking = false
+    StartThread(StopWalking)
+end
+""")
+        
+        outf.close()
+        print("Done writing LUS!", " ISWALK = ", ISWALK, "Varspeed = ", VARIABLESPEED)
 
 
 def register():
@@ -1135,6 +1479,7 @@ def register():
     bpy.types.Scene.my_tool = PointerProperty(type=MySettings)
     bpy.utils.register_class(SkeletorOperator)
     bpy.utils.register_class(SkeletorRotator)
+    bpy.utils.register_class(SkeletorLUSMaker)
     bpy.utils.register_class(SkeletorBOSMaker)
     bpy.utils.register_class(Skelepanel)
     bpy.utils.register_class(SimpleBoneAnglesPanel)
@@ -1144,6 +1489,7 @@ def unregister():
     bpy.utils.unregister_class(SkeletorOperator)
     bpy.utils.unregister_class(MySettings)
     bpy.utils.unregister_class(SkeletorRotator)
+    bpy.utils.unregister_class(SkeletorLUSMaker)
     bpy.utils.unregister_class(SkeletorBOSMaker)
     bpy.utils.unregister_class(Skelepanel)
     bpy.utils.unregister_class(SimpleBoneAnglesPanel)
