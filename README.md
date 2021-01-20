@@ -26,4 +26,5 @@ https://www.youtube.com/watch?v=gH5uATTTYB4
 8. Export to BOS.
 
 
-
+Example: 
+![example](example.gif)
