@@ -1256,11 +1256,17 @@ local function Walk()
         elif ISDEATH:
             # TODO for death animations:
             # turn values and speeds probably need to be converted to radians
-            outf.write(
-                "-- use call-script DeathAnim(); from Killed()\nDeathAnim() {--  %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
-                    INFOSTRING))
+            outf.write("""
+-- use StartThread(DeathAnim) from Killed()
+local function DeathAnim() -- %s
+\tSignal(SIG_WALK)
+\tSignal(SIG_AIM)
+\tStartThread(StopWalking()
+\tTurn(aimy1, y_axis, 0, %d)
+\tTurn(aimx1, x_axis, 0, %d)
+""" % (INFOSTRING, radians(120), radians(120)))
         else:
-            outf.write("-- start-script Animate(); -- from RestoreAfterDelay\n")
+            outf.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
             # TODO not walk scripts
             outf.write("""
 local function Animate() -- %s
@@ -1410,8 +1416,8 @@ local function Animate() -- %s
             if ISWALK:
                 outf.write('\n')
                 outf.write("""local function StopWalking()
-    Signal(SIG_WALK)
-    SetSignalMask(SIG_WALK)
+\tSignal(SIG_WALK)
+\tSetSignalMask(SIG_WALK)
 
 """)
                 if VARIABLESPEED:
@@ -1457,16 +1463,16 @@ local function Animate() -- %s
         if ISWALK and VARIABLESPEED:
             outf.write("""
 function script.StartMoving()
-    if not walking then
-        walking = true
-        StartThread(Walk)
-    end
+\tif not walking then
+\t\twalking = true
+\t\tStartThread(Walk)
+\tend
 end
 """)
             outf.write("""
 function script.StopMoving()
-    walking = false
-    StartThread(StopWalking)
+\twalking = false
+\tStartThread(StopWalking)
 end
 """)
         
