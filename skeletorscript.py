@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "Skeletor_S3O SpringRTS (.s3o)",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (0, 3, 8),
+	"version": (0, 3, 9),
 	"blender": (2, 80, 0),
 	"location": "3D View > Side panel",
 	"description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -45,6 +45,7 @@ from bpy.types import (Panel,
 					   PropertyGroup,
 					   )
 
+OMITDELTAOUTPUT = False # <= Hide the -- delta comments at the ends of the lines, to reduce fileSize
 
 class MySettings(PropertyGroup):
 	is_walk: BoolProperty(
@@ -187,7 +188,7 @@ class S3opiece:
 				maxy = max(maxy, vertex.co[1])
 				minx = min(minx, vertex.co[0])
 				maxx = max(maxx, vertex.co[0])
-		return (minx, maxx, miny, maxy, minz, maxz)
+		return minx, maxx, miny, maxy, minz, maxz
 
 
 def getmeshbyname(name):
@@ -208,7 +209,6 @@ def getS3ORootObject():
 				if child.parent and child.parent == obj:
 					print("Root found: ", obj)
 					return obj, obj.name    # rootObject, rootName
-					break
 	return None, ""     # I don't think this would ever happen, but who knows
 
 
@@ -501,7 +501,7 @@ class SkeletorOperator(bpy.types.Operator):
 						if boundingbox[5] > boundingbox[3] and boundingbox[5] > -1 * boundingbox[2]:  # points forward
 							tailpos = piece.worldpos + Vector((0, boundingbox[5], 0))
 						else:
-							if (boundingbox[3] > -1 * boundingbox[2]):
+							if boundingbox[3] > -1 * boundingbox[2]:
 								tailpos = piece.worldpos + Vector((0, 0, boundingbox[3]))  # up
 							else:
 								tailpos = piece.worldpos + Vector((0, 0, boundingbox[2]))  # down
@@ -709,9 +709,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						bone_name = bone_name[:-2]
 
 					ctarget = c.data_path.rpartition('.')[2]
-					if (
-							'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget) and 'location' not in ctarget:
+					# 'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget) \
+					if 'euler' not in ctarget and 'location' not in ctarget:
+						print("Skipping: "+ctarget)
 						continue
+					else:
+						print("Keeping: "+ctarget)
 
 					axis = str(c.array_index)
 
@@ -889,7 +892,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			if variablespeed:
 				cmdline = cmdline + '/ animSpeed'
 			cmdline = cmdline + '; '
-			if delta != 0:
+			if delta != 0 and not OMITDELTAOUTPUT:
 				cmdline = cmdline + '//delta=%.2f'%delta
 			return cmdline
 
@@ -922,7 +925,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		stopwalking_maxspeed = {}  # dict of bos commands, with max velocity in it to define the stopwalking function
 		firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
 		if ISWALK:
-			outf.write("Walk() {// %s \n\tset-signal-mask SIG_WALK;\n" % (INFOSTRING))
+			outf.write("Walk() {// %s \n\tset-signal-mask SIG_WALK;\n" % INFOSTRING)
 		elif ISDEATH:
 			outf.write(
 				"//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
@@ -1192,8 +1195,8 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 				cmdline = cmdline + move_variable % speed + ' '
 			if variablespeed:
 				cmdline = cmdline + '* speedMult'
-			cmdline = cmdline + ') '
-			if delta != 0:
+			cmdline = cmdline + ')'
+			if delta != 0 and not OMITDELTAOUTPUT:
 				cmdline = cmdline + '-- delta=%.2f'%delta
 			return cmdline
 
@@ -1261,14 +1264,14 @@ local function DeathAnim() -- %s
 \tTurn(aimy1, y_axis, 0, %d)
 \tTurn(aimx1, x_axis, 0, %d)
 """ % (INFOSTRING, radians(120), radians(120)))
+		# Not-walk scripts
 		else:
 			outf.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
-			# TODO not walk scripts
 			outf.write("""
 local function Animate() -- %s
-\tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
-\tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 """ % INFOSTRING)
+		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 
 		firststep = True
 		if not ISWALK:
