@@ -45,7 +45,7 @@ from bpy.types import (Panel,
 					   PropertyGroup,
 					   )
 
-OMITDELTAOUTPUT = False # <= Hide the -- delta comments at the ends of the lines, to reduce fileSize
+OMITDELTAOUTPUT = True # <= Hide the -- delta comments at the ends of the lines, to reduce fileSize
 
 class MySettings(PropertyGroup):
 	is_walk: BoolProperty(
@@ -67,6 +67,11 @@ class MySettings(PropertyGroup):
 		name="Variable amplitude walk",
 		description="Step lengths are variable (dynamic multipliers on all transforms)",
 		default=False
+	)
+	autoaddik: BoolProperty(
+		name="Auto-add IK to bone chains",
+		description="Whether IK constraints should be added to the bone chains",
+		default=True
 	)
 	iktargetends: BoolProperty(
 		name="Where to place IK targets",
@@ -101,6 +106,7 @@ class Skelepanel(bpy.types.Panel):
 		# row = layout.row()
 		# row.operator("skele.skeletorrotator", text='1. Correctly rotate S3O')
 
+		layout.prop(mytool, "autoaddik", text="Add IK targets to chains")
 		layout.prop(mytool, "iktargetends", text="IK targets at leafs")
 		row = layout.row()
 		row.operator('skele.skeletoroperator', text='1. Create Skeleton')
@@ -302,6 +308,7 @@ class SkeletorOperator(bpy.types.Operator):
 		print("skeletizing, very happy")
 		NOTAIL = True
 		IKTARGETENDS = context.scene.my_tool.iktargetends
+		AUTOADDIK = context.scene.my_tool.autoaddik
 
 		# debug delete all armatures and bones!
 		# bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -445,6 +452,7 @@ class SkeletorOperator(bpy.types.Operator):
 			newbone.name = piece.bonename
 
 			newbone.head = piece.worldpos
+			# if AUTOADDIK:
 			if NOTAIL:
 				newbone.tail = newbone.head + Vector((0, 5, 0))
 
@@ -463,13 +471,12 @@ class SkeletorOperator(bpy.types.Operator):
 				for child in piece.children:
 					if child.mesh is not None:
 						onlyemptychildren = False
-				if onlyemptychildren:
+				if onlyemptychildren and AUTOADDIK:
 					print("LOOKS LIKE AN ARM: ", piece.name)
 					ikbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
 					ikbone.head = newbone.tail
 					ikbone.tail = newbone.tail + Vector((0, 5, 0))
 					piece.iktarget = ikbone
-
 			else:  # end piece
 				# TODO: CHECK FOR GEOMETRY, is it a foot or an arm or a tentacle ?
 				# TODO: multiple branches for multiple toes give too many IK targets :/
@@ -481,20 +488,21 @@ class SkeletorOperator(bpy.types.Operator):
 						# this looks like a foot
 						tailpos = piece.worldpos + Vector((0, boundingbox[3], boundingbox[4]))
 						# better add the heel IK thing too XD
-						if not IKTARGETENDS:
-							heelbone = arm_data.edit_bones.new('iktarget.' + piece.parent.bonename)
-							heelbone.head = piece.parent.bone.tail  # newbone.head
-							heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
-							if NOTAIL:
-								heelbone.tail = heelbone.head + Vector((0, 5, 0))
-							piece.parent.iktarget = heelbone
-						else:
-							heelbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
-							heelbone.head = newbone.tail  # newbone.head
-							heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
-							if NOTAIL:
-								heelbone.tail = heelbone.head + Vector((0, 5, 0))
-							piece.iktarget = heelbone
+						if AUTOADDIK:
+							if not IKTARGETENDS:
+								heelbone = arm_data.edit_bones.new('iktarget.' + piece.parent.bonename)
+								heelbone.head = piece.parent.bone.tail  # newbone.head
+								heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
+								if NOTAIL:
+									heelbone.tail = heelbone.head + Vector((0, 5, 0))
+								piece.parent.iktarget = heelbone
+							else:
+								heelbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
+								heelbone.head = newbone.tail  # newbone.head
+								heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
+								if NOTAIL:
+									heelbone.tail = heelbone.head + Vector((0, 5, 0))
+								piece.iktarget = heelbone
 					else:
 						# todo this is not a foot
 						# guess if it points forward or up or down?
@@ -520,7 +528,6 @@ class SkeletorOperator(bpy.types.Operator):
 		print("=====Reparenting Bone-Bones=======")
 
 		for name, piece in pieces.items():
-
 			if piece.parent is not None and not piece.isAimXY:
 				piece.bone.parent = piece.parent.bone
 
@@ -529,22 +536,23 @@ class SkeletorOperator(bpy.types.Operator):
 
 		print("=====Setting IK Targets=======")
 
-		for name, piece in pieces.items():
-			if not piece.isAimXY:
-				armature_object.pose.bones[piece.bonename].rotation_mode = 'YXZ'  # was: 'ZXY'
+		if AUTOADDIK:
+			for name, piece in pieces.items():
+				if not piece.isAimXY:
+					armature_object.pose.bones[piece.bonename].rotation_mode = 'YXZ'  # was: 'ZXY'
 
-			if piece.iktarget is not None:
-				chainlength = 1
-				chainpos = piece.parent
-				while len(chainpos.children) == 1 and chainpos.parent is not None:
-					chainlength += 1
-					chainpos = chainpos.parent
-				print('Adding iktarget to ', piece.name, ', chain_length = ', chainlength)
-				constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
-				constraint.target = armature_object
-				constraint.subtarget = 'iktarget.' + piece.bonename
-				constraint.chain_count = chainlength
-				armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99  # avoids having to create knee poles
+				if piece.iktarget is not None and piece.parent is not None:
+					chainlength = 1
+					chainpos = piece.parent
+					while len(chainpos.children) == 1 and chainpos.parent is not None:
+						chainlength += 1
+						chainpos = chainpos.parent
+					print('Adding iktarget to ', piece.name, ', chain_length = ', chainlength)
+					constraint = armature_object.pose.bones[piece.bonename].constraints.new('IK')
+					constraint.target = armature_object
+					constraint.subtarget = 'iktarget.' + piece.bonename
+					constraint.chain_count = chainlength
+					armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99  # avoids having to create knee poles
 
 		print("=====Parenting meshes to bones=======")
 		# getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
