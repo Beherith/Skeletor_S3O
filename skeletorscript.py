@@ -1500,7 +1500,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 	def write_file(self, context, animframes, piecehierarchy):
 		fps = 30.0
-		move_turn_miniumum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
+		move_turn_minimum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
 		sleepPerFrame = 1.0 / fps
 		# conversion time:
 		# output a bos script
@@ -1532,28 +1532,30 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
 		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
-		blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
+		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
 
-		def MakeBOSLineString(turnOrMove, boneName, axisIndex, targetValue, speed, variableSpeed=True, indents=3,
+		def MakeLusTweenLineString(turnOrMove, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=3,
 		                      delta=0):
 			axisName = BOSAXIS[axisIndex]
 			targetValue = targetValue * blender_to_bos_axis_multiplier[turnOrMove][axisIndex]
-			cmdline = '' + '\t' * indents
-			cmdline = cmdline + turnOrMove + '('
-			cmdline = cmdline + boneName + ', '
-			cmdline = cmdline + axisName + ', '
-			if turnOrMove == 'Turn':
-				cmdline = cmdline + turn_variable % radians(targetValue) + ', '
-				cmdline = cmdline + turn_variable % radians(speed) + ' '
+			cmdLine = '' + '\t' * indents
+			cmdLine = cmdLine + "initTween({finalEndFrame=FEF, [" + boneName + "]"
+			cmdLine = cmdLine + '={[1]={cmd="' + turnOrMove + '", '
+			cmdLine = cmdLine + 'axis=' + axisName + ', targetValue='
+			if turnOrMove == 'turn':
+				cmdLine = cmdLine + turn_variable % radians(targetValue) + ', '
 			else:
-				cmdline = cmdline + move_variable % targetValue + ', '
-				cmdline = cmdline + move_variable % speed + ' '
-			if variableSpeed:
-				cmdline = cmdline + '* speedMult'
-			cmdline = cmdline + ')'
+				cmdLine = cmdLine + move_variable % targetValue + ', '
+
+			cmdLine = cmdLine + "firstFrame="+str(firstFrame)+", "
+			cmdLine = cmdLine + "lastFrame="+str(lastFrame)+","
+			## TODO: variableSpeed; probably multiply start/endFrame by speedMult and round it to Int
+			# if variableSpeed:
+			# 	cmdLine = cmdLine + '* speedMult'
+			cmdLine = cmdLine + '}},})'
 			if delta != 0 and not OMITDELTAOUTPUT:
-				cmdline = cmdline + '-- delta=%.2f'%delta
-			return cmdline
+				cmdLine = cmdLine + '-- delta=%.2f'%delta
+			return cmdLine
 
 		newfile_name = filepath + ".lua_tween_export.lua"
 		outFile = open(newfile_name, 'w')
@@ -1628,9 +1630,13 @@ local function Animate() -- %s
 		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 
+		lastFrame = keyframe_times[-1]
+		outFile.write("\tlocal FEF = "+str(lastFrame)+"\n")
+
 		firstStep = True
 		if not ISWALK:
 			firstStep = False
+
 
 		for frame_index, frame_time in enumerate(keyframe_times):
 			if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
@@ -1638,6 +1644,7 @@ local function Animate() -- %s
 
 			thisFrame = animframes[keyframe_times[frame_index]]
 			prevFrame = animframes[keyframe_times[frame_index - 1]]
+			#next_keyframe_time = animframes[keyframe_times[frame_index + 1]] if frame_index + 1 < len(keyframe_times) else thisFrame
 
 			keyframe_delta = keyframe_times[frame_index] - keyframe_times[frame_index - 1]
 			sleepTime = sleepPerFrame * keyframe_delta
@@ -1647,11 +1654,11 @@ local function Animate() -- %s
 					outFile.write("\n\t-- Frame: %i (first step)\n" % frame_time)
 				else:
 					if ISWALK:
-						outFile.write("\t\t-- Frame:%i\n" % frame_time)
+						outFile.write("\t\t-- Frame: %i\n" % frame_time)
 					elif ISDEATH:
-						outFile.write("\t\t-- Frame:%i\n" % frame_time)
+						outFile.write("\t\t-- Frame: %i\n" % frame_time)
 					else:
-						outFile.write("\t-- Frame:%i\n" % frame_time)
+						outFile.write("\t-- Frame: %i\n" % frame_time)
 
 			for bone_name in sorted(thisFrame.keys()):
 				bone_motions = thisFrame[bone_name]
@@ -1668,13 +1675,24 @@ local function Animate() -- %s
 					prevValue = 0
 					prevFrame = frame_index - 1
 					foundPrev = False
-					for previous in range(frame_index - 1, -1, -1):
+					nextValue = 0
+					nextKeyFrame = frame_index
+					foundNext = False
+					for previous in range(prevFrame, -1, -1):
 						if bone_name in animframes[keyframe_times[previous]] and axis in \
 								animframes[keyframe_times[previous]][bone_name]:
 							prevValue = animframes[keyframe_times[previous]][bone_name][axis]
 							foundPrev = True
 							prevFrame = previous
 							break
+					for nextKey in range(frame_time, lastFrame, 1):
+						if bone_name in animframes[keyframe_times[nextKey]] and axis in \
+								animframes[keyframe_times[nextKey]][bone_name]:
+							nextValue = animframes[keyframe_times[nextKey]][bone_name][axis]
+							foundNext = True
+							nextKeyFrame = nextKey
+							break
+					# # TODO: Finish the next keyframe logic, find final value for the tween
 					if not foundPrev and frame_index > 0:
 						print("Warning: Failed to find previous position for bone", bone_name, 'axis', axis, 'frame',
 							  keyframe_times[frame_index])
@@ -1684,7 +1702,7 @@ local function Animate() -- %s
 
 					axis_index = int(axis[-1])
 					# blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
-					if abs(value - prevValue) < move_turn_miniumum_threshold:  # 0.1 by default
+					if abs(value - prevValue) < move_turn_minimum_threshold:  # 0.1 by default
 						print("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevValue))
 						continue
 					else:
@@ -1692,23 +1710,23 @@ local function Animate() -- %s
 							if bone_name not in explodedpieces:
 								if axis.startswith('location') and abs(value - prevValue) > 100:
 
-									def recurseexplodechildren(piece_name):
+									def recurseExplodeChildren(piece_name):
 										BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE|NOHEATCLOUD;\n\t\t\thide %s;\n' % (
 											piece_name, piece_name)
 										outFile.write(BOS)
 										explodedpieces.append(piece_name)
 										for child in piecehierarchy[piece_name]:
-											recurseexplodechildren(child)
+											recurseExplodeChildren(child)
 
-									recurseexplodechildren(bone_name)
+									recurseExplodeChildren(bone_name)
 									continue
 							else:  # this piece has already blown up, ignore it
 								continue
 
 						# bos_cmd = '\t\t\t%s %s to %s %s speed %s %s; -- delta=%.2f '
-						turn_or_move = 'Turn'
+						turn_or_move = 'turn'
 						if axis.startswith('location'):  # Move
-							turn_or_move = 'Move'
+							turn_or_move = 'move'
 						stopWalking_cmd = '%s(%s, %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
 
 						if FIRSTFRAMESTANCE and frame_index == 0:
@@ -1724,12 +1742,14 @@ local function Animate() -- %s
 							stopwalking_maxspeed[stopWalking_cmd] = maxVelocity
 						rotations_sum += abs(value - prevValue)
 
-						BOS = MakeBOSLineString(
+						BOS = MakeLusTweenLineString(
 							turn_or_move,
 							bone_name,
 							axis_index,
 							value,
-							abs(value - prevValue) * fps if VARIABLESPEED else maxVelocity,
+							#abs(value - prevValue) * fps if VARIABLESPEED else maxVelocity,
+							frame_time, # firstFrame
+							lastFrame, #lastFrame
 							variableSpeed=VARIABLESPEED,
 							indents=2 if ISWALK and not firstStep else 1,
 							delta=value - prevValue
@@ -1747,18 +1767,19 @@ local function Animate() -- %s
 						if frame_index > 0:
 							outFile.write(BOS + '\n')
 
-			if frame_index > 0:
-
-				if VARIABLESPEED:
-					indent = '\t' if firstStep else '\t\t'
-					outFile.write(indent + 'Sleep(sleepTime)\n')
-				else:
-					outFile.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
-
-				if firstStep:
-					outFile.write("\n\twhile true do\n")
-					outFile.write("\t\tspeedMult, sleepTime = GetSpeedParams()\n")
-					firstStep = False
+			# TODO: Not sure if needed for tweens
+			# if frame_index > 0:
+			#
+			# 	if VARIABLESPEED:
+			# 		indent = '\t' if firstStep else '\t\t'
+			# 		outFile.write(indent + 'Sleep(sleepTime)\n')
+			# 	else:
+			# 		outFile.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
+			#
+			# 	if firstStep:
+			# 		outFile.write("\n\twhile true do\n")
+			# 		outFile.write("\t\tspeedMult, sleepTime = GetSpeedParams()\n")
+			# 		firstStep = False
 
 		if ISWALK:
 			outFile.write('\tend\n')
