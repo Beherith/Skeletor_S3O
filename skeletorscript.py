@@ -28,8 +28,9 @@ bl_info = {
 import bpy
 from math import pi, degrees, radians
 from mathutils import Vector, Euler, Matrix
-import os
-import sys
+
+# import os
+# import sys
 
 from bpy.props import (StringProperty,
 					   BoolProperty,
@@ -1499,12 +1500,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def tobos(self, context):
-		print("MAKING BOS, BOSS")
+		print("MAKING LUS TWEEN, LIKE A BOSS")
 		scene = context.scene
 		if 'Armature' not in context.scene.objects:
 			return
 		arma = context.scene.objects['Armature']
-		print("whichframe", self.whichframe)
+		print("whichframe: ", self.whichframe)
 		self.whichframe += 1
 		props = {"location": "move", "rotation_euler": "turn"}
 		bonesWithCurves = []
@@ -1518,7 +1519,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		# required structure:
 		# a dict of keyframes indexed by their frame number
-		animframes = {}  # {frame_number:{bone_name:{axis:value}}}
+		# animframes = {}  # {frame_number:{bone_name:{axis:value}}}
 		# the values of which is another dict, of piece names
 		# each piece name has a turn and a move op, with xzy coords
 
@@ -1529,7 +1530,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if arma.animation_data is not None:
 			if arma.animation_data.action is not None:
 				curves = arma.animation_data.action.fcurves
-				print("Animdata:", curves, arma.animation_data)
+				print("Animdata: ", curves, arma.animation_data)
 				for c in curves:
 					keyframes = c.keyframe_points
 					try:
@@ -1543,7 +1544,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						continue
 					if bone_name not in bonesWithCurves:
 						bonesWithCurves.append(bone_name)
-
 					if bone_name.endswith('.R') or bone_name.endswith('.L'):
 						bone_name = bone_name[:-2]
 
@@ -1565,19 +1565,23 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						# if abs(value)<0.1:
 						#    continue
 
-						if frame_time not in animframes:
-							animframes[frame_time] = {}
-						if bone_name not in animframes[frame_time]:
-							animframes[frame_time][bone_name] = {}
-						animframes[frame_time][bone_name][cTarget + axis] = value
+						# if frame_time not in animframes:
+						# 	animframes[frame_time] = {}
+						# if bone_name not in animframes[frame_time]:
+						# 	animframes[frame_time][bone_name] = {}
+						# animframes[frame_time][bone_name][cTarget + axis] = value
 
 						if bone_name not in keysPerBone:     #initialize bone entry if new
-							keysPerBone[bone_name] = {}  # []
-						# if frame_time not in keysPerBone[bone_name]:
-						# 	keysPerBone[bone_name][frame_time] = {}
-						keyframeData = { 'axisId': cTarget + axis, 'value': value }  # 'keyframe_time': frame_time,
-						# TODO: Has to be fixed. Probably keyframe_time has to be a dict key again
-						keysPerBone[bone_name][frame_time] = keyframeData.copy()
+							keysPerBone[bone_name] = {}
+
+						if frame_time not in keysPerBone[bone_name]:
+							keysPerBone[bone_name][frame_time] = {}
+						axisId = cTarget + axis
+						keyframeData = { 'value': value }  # 'keyframe_time': frame_time,
+
+						keysPerBone[bone_name][frame_time][axisId] = keyframeData.copy()
+
+					# keysPerBone[bone_name] = OrderedDict(sorted(keysPerBone[bone_name].items(), key=lambda t: t[0]))
 
 					# # Not needed (or reliable), we'll do a sorted keyList instead
 					# oldKeysPerBone = keysPerBone
@@ -1585,8 +1589,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					# 	frameDict = dict(sorted(frameDict.items(), key=lambda x:x[0]))
 					# 	keysPerBone[bone_name] = frameDict
 
-		if FullDebug:
-			print(animframes)
+		# if FullDebug:
+		# 	print(animframes)
 
 		print("\n\n\n\n\n### Keys Per Bone (for the Tween Export)\n")
 		print(keysPerBone)
@@ -1621,73 +1625,82 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				continue
 			bone_name = bone.name
 			if 'IK' in bone.constraints and bone.constraints['IK'].mute == False:
-				chainlength = bone.constraints['IK'].chain_count
-				if chainlength == 0:  # this means that everything up until the root is in the chain
-					print(bone.name, 'has ik length', chainlength)
+				chainLength = bone.constraints['IK'].chain_count
+				if chainLength == 0:  # this means that everything up until the root is in the chain
+					print(bone_name, 'has ik length', chainLength)
 					p = bone
 					while p is not None:
 						print("inchain", p.name)
 						if p.name not in bonesInIkChains:
 							bonesInIkChains.append(p.name)
-						chainlength = chainlength - 1
+						chainLength = chainLength - 1
 						p = p.parent
 
 				else:
-					print(bone.name, 'has ik length', chainlength)
+					print(bone_name, 'has ik length', chainLength)
 					p = bone
-					while chainlength > 0:
+					while chainLength > 0:
 						print("inchain", p.name)
 						if p.name not in bonesInIkChains:
 							bonesInIkChains.append(p.name)
-						chainlength = chainlength - 1
+						chainLength = chainLength - 1
 						p = p.parent
 
 		print("Gathering animdata")
 
 		#for frame_time in sorted(animframes.keys()):
 		for bone in arma.pose.bones:
-			#for bone in arma.pose.bones:
-			bpy.context.scene.frame_set(frame_time)
 			if 'iktarget' in bone.name:
 				continue
 			bone_name = bone.name
-
 			if bone_name.endswith('.R') or bone_name.endswith('.L'):
 				bone_name = bone_name[:-2]
-			bone_matrix = bone.matrix.copy()
 
-			MYEULER = 'YXZ'  # 'ZXY'
-			current_bone = bone
-			parent_bone_matrix = bone.matrix.copy()
-			if current_bone.parent is not None:
-				parent_bone_matrix = current_bone.parent.matrix.copy()
-				parent_bone_matrix.invert()
+			if bone_name not in keysPerBone:
+				continue
 
-				bone_matrix = parent_bone_matrix @ bone_matrix
-				current_bone = current_bone.parent
+			#for bone in arma.pose.bones:
+			for frame_time in keysPerBone[bone_name]:    # sorted(keysPerBone[bone_name].keys()):
+				bpy.context.scene.frame_set(frame_time)
 
-			rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
-			rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
-			if FullDebug:
+				bone_matrix = bone.matrix.copy()
+
+				MYEULER = 'YXZ'  # 'ZXY'
+				current_bone = bone
+				parent_bone_matrix = bone.matrix.copy()
+				if current_bone.parent is not None:
+					parent_bone_matrix = current_bone.parent.matrix.copy()
+					parent_bone_matrix.invert()
+
+					bone_matrix = parent_bone_matrix @ bone_matrix
+					current_bone = current_bone.parent
+
+				rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
+				rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
 				print(rotation_text)
-			for frame_time in sorted(keysPerBone[bone_name].keys()):
+				#
+				# for frame_time in sorted(keysPerBone[bone_name].keys()):
 				if FullDebug:
 					print("SETTING FRAMETIME", frame_time)
-				# if bone_name not in keysPerBone:
-				# 	keysPerBone[bone_name] = {}
-				if frame_time not in keysPerBone[bone_name]:
-					keysPerBone[bone_name][frame_time] = {}
+				# if frame_time not in keysPerBone[bone_name]:
+				# 	keysPerBone[bone_name][frame_time] = {}
 				if bone_name not in bonesInIkChains:
 					for axis in range(3):
-						keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(
-							arma.pose.bones[bone.name].rotation_euler[axis])
+						axisId = 'rot' + str(axis)
+						value = degrees(arma.pose.bones[bone.name].rotation_euler[axis])
+						keysPerBone[bone_name][frame_time][axisId] = { "value": value }
+						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(
+						# 	arma.pose.bones[bone.name].rotation_euler[axis])
 				else:
 					for axis, value in enumerate(rot[0:3]):
+						axisId = 'rot' + str(axis)
+						value = degrees(value)
 						print('adding', frame_time, bone_name, 'rot' + str(axis), value)
-						keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(value)
+						keysPerBone[bone_name][frame_time][axisId] = { "value": value }
+						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(value)
 
 		if FullDebug:
-			print("Keyframes Per Bone: ", keysPerBone)
+			print("\n\n\nKeyframes Per Bone: ", keysPerBone)
 		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy)
 		if FullDebug:
 			print("bonesinIKchains: ", bonesInIkChains)
@@ -1837,63 +1850,72 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 
-		for bone_name, keys_list in keysPerBone:
-			for i, keyframeData in keys_list:
-				if i >= len(keys_list-2):           # Only run up to the previous to last key
+		for bone_name, keys_dic in keysPerBone.items():
+			keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
+			keyframe_idx = -1
+			for keyframe_time, keyframeData in keys_dic.items():
+				keyframe_idx += 1
+				if keyframe_idx >= len(keys_dic)-2:           # Only run up to the previous to last key
 					continue
-				axisId = keyframeData["axisId"]
-				value = keyframeData["value"]
-				keyframeTime = keyframeData["keyframe_time"]
-				if not axisId.startswith('location', 'rot'):
-					continue
-				# Let's go through all next keys and try to find a match for this key type
-				foundNextKey = False
-				nextValue = value
-				nextKeyframeTime = keyframeTime
-				delta = 0
-				turn_or_move = 'turn'
-				for nextIdx in range(i+1, len(keys_list)-1, 1):
-					nextKeyframeData = keysPerBone[bone_name][nextIdx]
-					nextKeyframeAxis = nextKeyframeData["axisId"]
-					if axisId in nextKeyframeAxis:
-						nextKeyframeTime = nextKeyframeData["keyframe_time"]
-						nextValue = nextKeyframeData["value"]
-						keyframeData["nextKeyTime"] = nextKeyframeTime
-						delta = abs(nextValue - value)
-						# axisIdx = int(axisId[-1])
-						# if delta < move_turn_minimum_threshold:  # 0.1 by default
-						# 	print("%i Ignored %s %s of %.6f delta" % (keyframeTime, bone_name, axisId, delta))
-						# 	continue
-						if axisId.startswith('location'):  # Move
-							turn_or_move = 'move'
-						keysPerBone[bone_name][i] = { "keyframe_time": keyframeTime, "axisId": axisId, "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+				for axisId, data in keyframeData.items():
+					print("axisId: "+axisId)
+					# axisId = keyframeData["axisId"]
+					value = data["value"]
+					#if not axisId.startswith('location', 'rot'):
+					if not 'location' in axisId and not 'rot' in axisId:
+						continue
+					if 'quaternion' in axisId:
+						continue
+					# Let's go through all next keys and try to find a match for this key type
+					foundNextKey = False
+					# nextValue = value
+					nextKeyframeTime = keyframe_time
+					delta = 0
+					turn_or_move = 'turn'
+					for nextIdx in range(keyframe_idx+1, len(keys_dic)-1, 1):
+						nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
+						if not axisId in nextKeyframeData:
+							continue
+						nextKeyframeAxis = nextKeyframeData[axisId]
+						if axisId in nextKeyframeAxis:
+							nextKeyframeTime = nextKeyframeData["keyframe_time"]
+							nextValue = nextKeyframeData["value"]
+							keyframeData["nextKeyTime"] = nextKeyframeTime
+							delta = abs(nextValue - value)
+							# axisIdx = int(axisId[-1])
+							# if delta < move_turn_minimum_threshold:  # 0.1 by default
+							# 	print("%i Ignored %s %s of %.6f delta" % (keyframeTime, bone_name, axisId, delta))
+							# 	continue
+							if axisId.startswith('location'):  # Move
+								turn_or_move = 'move'
+							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
 
-				if not foundNextKey:     # and i > 0:
-					print("Warning: Failed to find previous position for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframeTime)
-				else:
-					BOS = MakeLusTweenLineString(
-						turn_or_move,
-						bone_name,
-						int(axisId[-1]),
-						value,
-						keyframeTime, # firstFrame
-						nextKeyframeTime, #lastFrame
-						variableSpeed=VARIABLESPEED,
-						indents=2,  # TODO: if ISWALK and not firstStep else 1,
-						delta=delta,
-					)
+					if not foundNextKey:     # and i > 0:
+						print("Warning: Failed to find next position for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
+					else:
+						BOS = MakeLusTweenLineString(
+							turn_or_move,
+							bone_name,
+							int(axisId[-1]),
+							value,
+							keyframe_time, # firstFrame
+							nextKeyframeTime, #lastFrame
+							variableSpeed=VARIABLESPEED,
+							indents=2,  # TODO: if ISWALK and not firstStep else 1,
+							delta=delta,
+						)
 
-					if delta > 130 and turn_or_move == "turn":
-						gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
-							keyframeTime, bone_name)
-						print(gWarning)
-						BOS += '-- ' + gWarning + '\n'
+						if delta > 130 and turn_or_move == "turn":
+							gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
+								keyframe_time, bone_name)
+							print(gWarning)
+							BOS += '-- ' + gWarning + '\n'
 
-					if not foundNextKey:
-						BOS += '-- ' + "Failed to find next value for bone " + bone_name + ', axis ' + axisId
+						if not foundNextKey:
+							BOS += '-- ' + "Failed to find next value for bone " + bone_name + ', axis ' + axisId
 
-					# if frame_index > 0:
-					outFile.write(BOS + '\n')
+						# if frame_index > 0:
+						outFile.write(BOS + '\n')
 
 		## ## TODO: WIP
 
