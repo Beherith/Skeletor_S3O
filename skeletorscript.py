@@ -1751,7 +1751,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			## TODO: variableSpeed; probably multiply start/endFrame by speedMult and round it to Int
 			# if variableSpeed:
 			# 	cmdLine = cmdLine + '* speedMult'
-			cmdLine = cmdLine + '}},})'
+			cmdLine = cmdLine + '},'
 			if delta != 0 and not OMITDELTAOUTPUT:
 				cmdLine = cmdLine + '-- delta=%.2f'%delta
 			return cmdLine
@@ -1849,7 +1849,11 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			luaIdx = 1
 			for keyframe_time, keyframeData in keys_dic.items():
 				keyframe_idx += 1   # Starts from idx=0
-				if keyframe_idx >= len(keys_dic)-2:           # Only run up to the previous to last key
+				if keyframe_idx >= len(keys_dic)-2:               # Only run up to the previous to last key
+					break  # continue
+				if not (keyframe_time < VERYLASTFRAME):           # Must respect the final scene frame
+					break
+				if keyframe_time < VERYFIRSTFRAME:                # Respect the first scene frame
 					continue
 				for axisId, data in keyframeData.items():
 					# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
