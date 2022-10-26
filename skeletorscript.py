@@ -1549,12 +1549,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 					cTarget = c.data_path.rpartition('.')[2]
 					# 'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget) \
-					if FullDebug:
-						if 'euler' not in cTarget and 'location' not in cTarget:
-							print("Skipping: "+cTarget)
-							continue
-						else:
-							print("Keeping: "+cTarget)
+					#if FullDebug:
+					if 'euler' not in cTarget and 'location' not in cTarget:
+						print("Skipping: "+cTarget)
+						continue
+					else:
+						print("Keeping: "+cTarget)
 
 					axis = str(c.array_index)
 
@@ -1743,6 +1743,17 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
 		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
 
+		# BOS = MakeLusTweenLineString(
+		# 	turn_or_move,
+		# 	bone_name,
+		# 	int(axisId[-1]),
+		# 	nextValue,
+		# 	keyframe_time,  # firstFrame
+		# 	nextKeyframeTime,  # lastFrame
+		# 	variableSpeed=VARIABLESPEED,
+		# 	indents=2,  # TODO: if ISWALK and not firstStep else 1,
+		# 	delta=delta,
+		# )
 		def MakeLusTweenLineString(turnOrMove, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=3,
 		                      delta=0):
 			axisName = BOSAXIS[axisIndex]
@@ -1851,14 +1862,16 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 
 		for bone_name, keys_dic in keysPerBone.items():
+			print("Bone: ", bone_name, " Keys_dic:")
+			print(keys_dic)
 			keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
 			keyframe_idx = -1
 			for keyframe_time, keyframeData in keys_dic.items():
-				keyframe_idx += 1
+				keyframe_idx += 1   # Starts from idx=0
 				if keyframe_idx >= len(keys_dic)-2:           # Only run up to the previous to last key
 					continue
 				for axisId, data in keyframeData.items():
-					print("axisId: "+axisId)
+					# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
 					# axisId = keyframeData["axisId"]
 					value = data["value"]
 					#if not axisId.startswith('location', 'rot'):
@@ -1868,27 +1881,32 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						continue
 					# Let's go through all next keys and try to find a match for this key type
 					foundNextKey = False
-					# nextValue = value
+					nextValue = value
 					nextKeyframeTime = keyframe_time
 					delta = 0
 					turn_or_move = 'turn'
 					for nextIdx in range(keyframe_idx+1, len(keys_dic)-1, 1):
 						nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
-						if not axisId in nextKeyframeData:
+						# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
+						if not axisId in nextKeyframeData.keys():
 							continue
-						nextKeyframeAxis = nextKeyframeData[axisId]
-						if axisId in nextKeyframeAxis:
-							nextKeyframeTime = nextKeyframeData["keyframe_time"]
-							nextValue = nextKeyframeData["value"]
-							keyframeData["nextKeyTime"] = nextKeyframeTime
-							delta = abs(nextValue - value)
-							# axisIdx = int(axisId[-1])
-							# if delta < move_turn_minimum_threshold:  # 0.1 by default
-							# 	print("%i Ignored %s %s of %.6f delta" % (keyframeTime, bone_name, axisId, delta))
-							# 	continue
-							if axisId.startswith('location'):  # Move
-								turn_or_move = 'move'
-							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+						#nextKeyframeAxis = nextKeyframeData[axisId]
+						# print("Searching ", axisId, ", nextKeyframeData: ", nextKeyframeData)  # , ", nextKeyframeAxis: ", nextKeyframeAxis)
+						#if axisId in nextKeyframeAxis:
+						nextKeyframeTime = keys_list[nextIdx][0]    # Gets the key of the next item (== keyframe_number)
+						nextValue = nextKeyframeData[axisId]["value"]
+						# keyframeData["nextKeyTime"] = nextKeyframeTime
+						delta = abs(nextValue - value)
+						print("Frame: ", keyframe_time, " - nextValue found: ", nextValue, ", delta: ", delta)
+						# axisIdx = int(axisId[-1])
+						# if delta < move_turn_minimum_threshold:  # 0.1 by default
+						# 	print("%i Ignored %s %s of %.6f delta" % (keyframeTime, bone_name, axisId, delta))
+						# 	continue
+						if axisId.startswith('location'):  # Move
+							turn_or_move = 'move'
+						foundNextKey = True
+						keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+						break
 
 					if not foundNextKey:     # and i > 0:
 						print("Warning: Failed to find next position for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
@@ -1897,7 +1915,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							turn_or_move,
 							bone_name,
 							int(axisId[-1]),
-							value,
+							nextValue,
 							keyframe_time, # firstFrame
 							nextKeyframeTime, #lastFrame
 							variableSpeed=VARIABLESPEED,
