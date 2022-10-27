@@ -1842,8 +1842,10 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		outFile.write("initTween({veryLastFrame="+str(VERYLASTFRAME)+",\n")
 		for bone_name, keys_dic in keysPerBone.items():
 			outFile.write("\t\t\t[" + bone_name + "]={\n")
-			print("Bone: ", bone_name, " Keys_dic:")
+			print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
 			print(keys_dic)
+			# firstKeyframe = True
+			# lastTargetValue = {}
 			keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
 			keyframe_idx = -1
 			luaIdx = 1
@@ -1859,10 +1861,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
 					# axisId = keyframeData["axisId"]
 					value = data["value"]
-					#if not axisId.startswith('location', 'rot'):
-					if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
-						continue
 					if 'quaternion' in axisId:
+						continue
+					if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
 						continue
 					# Let's go through all next keys and try to find a match for this key type
 					foundNextKey = False
@@ -1894,12 +1895,19 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						break
 
 					if not foundNextKey:     # and i > 0:
-						print("Warning: Failed to find next position for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
+						print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
 					else:
+						axisIndex = int(axisId[-1])
+						# If lastTargetValue already initialized and nextValue is the same as in lastTargetValue, skip
+						# print("nextValue: ",nextValue)  # ," lastTargetValue: ",lastTargetValue[turn_or_move][axisIndex])
+						# if (turn_or_move in lastTargetValue) and (nextValue == lastTargetValue[turn_or_move][axisIndex]):
+						# 	continue
+						if delta == 0:
+							continue
 						BOS = MakeLusTweenLineString(
 							turn_or_move,
 							bone_name,
-							int(axisId[-1]),    #last char in string, eg.: rotation_euler0 => 0
+							axisIndex,    #last char in string, eg.: rotation_euler0 => 0
 							nextValue,
 							keyframe_time, # firstFrame
 							nextKeyframeTime, #lastFrame
@@ -1908,6 +1916,10 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							delta=delta,
 							luaIdx=luaIdx,
 						)
+						# if firstKeyframe:
+						# 	lastTargetValue = {"move": [0] * 3, "turn": [0] * 3}  # Same as [0, 0, 0]
+						# 	firstKeyframe = False
+						# lastTargetValue[turn_or_move][axisIndex] = nextValue
 						luaIdx += 1
 
 						if delta > 130 and turn_or_move == "turn":
