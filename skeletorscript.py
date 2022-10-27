@@ -1851,9 +1851,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			luaIdx = 1
 			for keyframe_time, keyframeData in keys_dic.items():
 				keyframe_idx += 1   # Starts from idx=0
-				if keyframe_idx >= len(keys_dic)-2:               # Only run up to the previous to last key
+				if keyframe_idx >= len(keys_dic)-1:               # Only run up to the previous to last key
 					break  # continue
-				if not (keyframe_time < VERYLASTFRAME):           # Must respect the final scene frame
+				if not (keyframe_time <= VERYLASTFRAME):          # Must respect the final scene frame
 					break
 				if keyframe_time < VERYFIRSTFRAME:                # Respect the first scene frame
 					continue
