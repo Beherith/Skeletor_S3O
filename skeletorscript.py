@@ -1841,6 +1841,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 		outFile.write("initTween({veryLastFrame="+str(VERYLASTFRAME)+",\n")
 		for bone_name, keys_dic in keysPerBone.items():
+			keys_dic = dict(sorted(keys_dic.items()))
 			outFile.write("\t\t\t[" + bone_name + "]={\n")
 			print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
 			print(keys_dic)
@@ -1871,7 +1872,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					nextKeyframeTime = keyframe_time
 					delta = 0
 					turn_or_move = 'turn'
-					for nextIdx in range(keyframe_idx+1, len(keys_dic)-1, 1):
+					for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
 						nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
 						# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
 						if not axisId in nextKeyframeData.keys():
