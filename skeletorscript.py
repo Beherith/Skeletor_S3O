@@ -1841,6 +1841,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 		outFile.write("initTween({veryLastFrame="+str(VERYLASTFRAME)+",\n")
 		for bone_name, keys_dic in keysPerBone.items():
+			if len(keys_dic.items()) == 0:      # skip bones with no keyframes
+				continue
 			keys_dic = dict(sorted(keys_dic.items()))
 			outFile.write("\t\t\t[" + bone_name + "]={\n")
 			print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
@@ -1903,7 +1905,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						# print("nextValue: ",nextValue)  # ," lastTargetValue: ",lastTargetValue[turn_or_move][axisIndex])
 						# if (turn_or_move in lastTargetValue) and (nextValue == lastTargetValue[turn_or_move][axisIndex]):
 						# 	continue
-						if delta == 0:
+						if delta < 0.01:
 							continue
 						BOS = MakeLusTweenLineString(
 							turn_or_move,
