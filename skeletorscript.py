@@ -1716,8 +1716,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
 		VARIABLESCALE = context.scene.my_tool.varscale
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
-		VERYFIRSTFRAME = context.scene.frame_start
-		VERYLASTFRAME = context.scene.frame_end
+		SCENEFIRSTFRAME = context.scene.frame_start
+		SCENELASTFRAME = context.scene.frame_end
 
 		move_variable = '%.6f'
 		turn_variable = '%.6f'
@@ -1731,7 +1731,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
 		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
-		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
+		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
 
 		def MakeLusTweenLineString(turnOrMove, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7,
 		                      delta=0, luaIdx=0):
@@ -1839,12 +1839,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 # 			firstStep = False
 
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
-		outFile.write("initTween({veryLastFrame="+str(VERYLASTFRAME)+",\n")
+		outFile.write("initTween({veryLastFrame="+str(SCENELASTFRAME - SCENEFIRSTFRAME)+",\n")
 		for bone_name, keys_dic in keysPerBone.items():
+			tweenCount = 0
 			if len(keys_dic.items()) == 0:      # skip bones with no keyframes
 				continue
 			keys_dic = dict(sorted(keys_dic.items()))
-			outFile.write("\t\t\t[" + bone_name + "]={\n")
+			BONEHEADERLINE = "\t\t\t[" + bone_name + "]={\n"
 			print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
 			print(keys_dic)
 			# firstKeyframe = True
@@ -1856,9 +1857,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				keyframe_idx += 1   # Starts from idx=0
 				if keyframe_idx >= len(keys_dic)-1:               # Only run up to the previous to last key
 					break  # continue
-				if not (keyframe_time <= VERYLASTFRAME):          # Must respect the final scene frame
+				if not (keyframe_time <= SCENELASTFRAME):          # Must respect the final scene frame
 					break
-				if keyframe_time < VERYFIRSTFRAME:                # Respect the first scene frame
+				if keyframe_time < SCENEFIRSTFRAME:                # Respect the first scene frame
 					continue
 				for axisId, data in keyframeData.items():
 					# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
@@ -1873,7 +1874,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					nextValue = value
 					nextKeyframeTime = keyframe_time
 					delta = 0
-					turn_or_move = 'turn'
+					turn_or_move = 'turn' if ('rotation' in axisId) else 'move'
 					for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
 						nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
 						# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
@@ -1900,20 +1901,24 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					if not foundNextKey:     # and i > 0:
 						print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
 					else:
-						axisIndex = int(axisId[-1])
 						# If lastTargetValue already initialized and nextValue is the same as in lastTargetValue, skip
 						# print("nextValue: ",nextValue)  # ," lastTargetValue: ",lastTargetValue[turn_or_move][axisIndex])
 						# if (turn_or_move in lastTargetValue) and (nextValue == lastTargetValue[turn_or_move][axisIndex]):
 						# 	continue
 						if delta < 0.01:
 							continue
+						tweenCount += 1
+						if tweenCount == 1:     #  Header line is only written before the 1st tween
+							outFile.write(BONEHEADERLINE)
+						axisIndex = int(axisId[-1])
 						BOS = MakeLusTweenLineString(
 							turn_or_move,
 							bone_name,
 							axisIndex,    #last char in string, eg.: rotation_euler0 => 0
 							nextValue,
-							keyframe_time, # firstFrame
-							nextKeyframeTime, #lastFrame
+							keyframe_time - SCENEFIRSTFRAME, # firstFrame, offset by the first frame in the scene
+							(nextKeyframeTime - SCENEFIRSTFRAME) if (nextKeyframeTime <= SCENELASTFRAME) \
+																else (SCENELASTFRAME - SCENEFIRSTFRAME), #lastFrame
 							variableSpeed=VARIABLESPEED,
 							indents=7,  # TODO: if ISWALK and not firstStep else 1,
 							delta=delta,
@@ -1936,7 +1941,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 						# if frame_index > 0:
 						outFile.write(BOS + '\n')
-			outFile.write('\t\t\t\t\t\t   },\n')
+			if tweenCount > 0:      # Write bone's trailer line
+				outFile.write('\t\t\t\t\t\t   },\n')
 
 		outFile.write('\t\t})\n')
 		## ## TODO: WIP
