@@ -1690,8 +1690,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			print("\n\n\nKeyframes Per Bone: ", keysPerBone)
 		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy)
 		if FullDebug:
-			print("bones in IKchains: ", bonesInIkChains)
-			print("bones with curves: ", bonesWithCurves)
+			print("Bones in IKchains: ", bonesInIkChains)
+			print("Bones with curves: ", bonesWithCurves)
 
 	def write_file(self, context, keysPerBone, pieceHierarchy):
 		fps = 30.0
@@ -1753,7 +1753,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			# 	cmdLine = cmdLine + '* speedMult'
 			cmdLine = cmdLine + '},'
 			if delta != 0 and not OMITDELTAOUTPUT:
-				cmdLine = cmdLine + '-- delta=%.2f'%delta
+				cmdLine = cmdLine + ' -- delta=%.2f'%delta
+			if turnOrMove == "turn" and abs(delta) > 3.1399:
+				cmdLine = cmdLine + ' -- Possible unwanted rotation, keep deltas < 180 degrees (3.1399 rad)'
 			return cmdLine
 
 		newfile_name = filepath + ".lua_tween_export.lua"
