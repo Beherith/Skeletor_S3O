@@ -209,9 +209,11 @@ def getmeshbyname(name):
 
 
 def getS3ORootObject():
+	currentCollection = bpy.context.collection
 	bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 	bpy.ops.object.mode_set(mode='OBJECT')
-	for obj in bpy.data.objects:
+	#for obj in bpy.data.objects:
+	for obj in currentCollection.all_objects:
 		if 'SpringRadius' in obj.name or 'SpringHeight' in obj.name:
 			continue
 		if obj.parent is None:
@@ -259,7 +261,7 @@ class SkeletorRotator(bpy.types.Operator):
 		scene = context.scene
 		for obj in scene.objects:
 			obj.select_set(True)
-			obj.rotation_mode = 'ZXY'
+			obj.rotation_mode = 'YXZ'  # Was: 'ZXY'
 		bpy.ops.object.select_all(action='DESELECT')
 
 		rootObject, rootName = getS3ORootObject()
@@ -332,6 +334,7 @@ class SkeletorOperator(bpy.types.Operator):
 		# the amount of geometry each object has.
 
 		# find the object with no parents, but has children (root) - ignore *SpringHeight and *SpringRadius
+		# TODO: Pass currentCollection here
 		rootObject, rootName = getS3ORootObject()
 
 		# got the root!
@@ -342,7 +345,9 @@ class SkeletorOperator(bpy.types.Operator):
 
 		print("====Collecting Pieces====")
 		pieces[rootName] = rootPiece
-		for obj in bpy.data.objects:
+		currentCollection = bpy.context.collection
+		# for obj in bpy.data.objects:
+		for obj in currentCollection.all_objects:
 			if obj.parent is not None:
 				localPos = obj.matrix_local  # local x = [0][3], y = [1][3], z = [2][3]
 				newPiece: S3opiece = S3opiece(obj.name, obj, getmeshbyname(obj.name), localPos[0][3],
@@ -1578,10 +1583,10 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# if FullDebug:
 		# 	print(animframes)
 
-		print("\n\n\n\n\n### Keys Per Bone (for the Tween Export)\n")
+		print("\n\n\### Keys Per Bone (for the Tween Export)\n")
 		print(keysPerBone)
 
-		print("\nGathering piece hierarchy")
+		print("\n\nGathering piece hierarchy\n")
 
 		def posebone_name_to_piece_name(poseBone_name):
 			if 'iktarget' in bone.name:
@@ -1602,10 +1607,10 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							pieceHierarchy[parentName] = [pieceName]
 						else:
 							pieceHierarchy[parentName].append(pieceName)
-		print('piecehierarchy: ', pieceHierarchy)
+		print('\n\npiecehierarchy: \n', pieceHierarchy)
 
 		if FullDebug:
-			print("Gathering IK chains")
+			print("\n\nGathering IK chains\n")
 			#
 			for bone in arma.pose.bones:
 				if 'iktarget' in bone.name:
@@ -1841,113 +1846,125 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 # 			firstStep = False
 
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
-		outFile.write("initTween({veryLastFrame="+str(SCENELASTFRAME - SCENEFIRSTFRAME)+",\n")
-		for bone_name, keys_dic in keysPerBone.items():
-			tweenCount = 0
-			if len(keys_dic.items()) == 0:      # skip bones with no keyframes
+
+		markers = []
+		for m in context.scene.timeline_markers:
+			markers.append(m.frame)
+
+		print("\n\nMarkers' frames:\n")
+		print(markers)
+
+		RANGESTARTFRAME = 0
+		RANGELASTFRAME = SCENELASTFRAME
+		if len(markers) == 0:                       # Little hack so we always have at least one range
+			markers.append(SCENELASTFRAME)
+
+		for i in range(len(markers)):
+			RANGELASTFRAME = markers[i]
+			if RANGELASTFRAME > SCENELASTFRAME:       # Must respect the final scene frame
+				break
+			if RANGELASTFRAME < SCENEFIRSTFRAME:      # Respect the first scene frame
 				continue
-			keys_dic = dict(sorted(keys_dic.items()))
-			BONEHEADERLINE = "\t\t\t[" + bone_name + "]={\n"
-			print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
-			print(keys_dic)
-			# firstKeyframe = True
-			# lastTargetValue = {}
-			keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
-			keyframe_idx = -1
-			luaIdx = 1
-			for keyframe_time, keyframeData in keys_dic.items():
-				keyframe_idx += 1   # Starts from idx=0
-				if keyframe_idx >= len(keys_dic)-1:               # Only run up to the previous to last key
-					break  # continue
-				if not (keyframe_time <= SCENELASTFRAME):          # Must respect the final scene frame
-					break
-				if keyframe_time < SCENEFIRSTFRAME:                # Respect the first scene frame
+			print("\n\n\nMarker Range: " + str(RANGESTARTFRAME) + " to " + str(RANGELASTFRAME))
+			outFile.write("local function anim"+str(i+1)+"()\n")    # Let's do anim1..n to match lua's indexing
+			#### ACTUAL TWEEN EXPORT
+			outFile.write("\tinitTween({veryLastFrame="+str(RANGELASTFRAME - RANGESTARTFRAME)+",\n")
+			for bone_name, keys_dic in keysPerBone.items():
+				tweenCount = 0
+				if len(keys_dic.items()) == 0:      # skip bones with no keyframes
 					continue
-				for axisId, data in keyframeData.items():
-					# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
-					# axisId = keyframeData["axisId"]
-					value = data["value"]
-					if 'quaternion' in axisId:
-						continue
-					if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
-						continue
-					# Let's go through all next keys and try to find a match for this key type
-					foundNextKey = False
-					nextValue = value
-					nextKeyframeTime = keyframe_time
-					delta = 0
-					turn_or_move = 'turn' if ('rotation' in axisId) else 'move'
-					for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
-						nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
-						# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
-						if not axisId in nextKeyframeData.keys():
-							continue
-						#nextKeyframeAxis = nextKeyframeData[axisId]
-						# print("Searching ", axisId, ", nextKeyframeData: ", nextKeyframeData)  # , ", nextKeyframeAxis: ", nextKeyframeAxis)
-						#if axisId in nextKeyframeAxis:
-						nextKeyframeTime = keys_list[nextIdx][0]    # Gets the key of the next item (== keyframe_number)
-						nextValue = nextKeyframeData[axisId]["value"]
-						# keyframeData["nextKeyTime"] = nextKeyframeTime
-						delta = abs(nextValue - value)
-						print("AxisId: ", axisId, "Frame: ", keyframe_time, " - nextValue found: ", nextValue, ", delta: ", delta)
-						# axisIdx = int(axisId[-1])
-						# if delta < move_turn_minimum_threshold:  # 0.1 by default
-						# 	print("%i Ignored %s %s of %.6f delta" % (keyframeTime, bone_name, axisId, delta))
-						# 	continue
-						if axisId.startswith('location'):  # Move
-							turn_or_move = 'move'
-						foundNextKey = True
-						keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+				keys_dic = dict(sorted(keys_dic.items()))
+				BONEHEADERLINE = "\t\t\t\t[" + bone_name + "]={\n"
+				print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
+				print(keys_dic)
+				# firstKeyframe = True
+				# lastTargetValue = {}
+				keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
+				keyframe_idx = -1
+				luaIdx = 1
+				for keyframe_time, keyframeData in keys_dic.items():
+					keyframe_idx += 1   # Starts from idx=0
+					if keyframe_idx >= len(keys_dic)-1:               # Only run up to the previous to last key
+						break  # continue
+					if not (keyframe_time <= RANGELASTFRAME):          # Must respect the final scene frame
 						break
-
-					if not foundNextKey:     # and i > 0:
-						print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
-					else:
-						# If lastTargetValue already initialized and nextValue is the same as in lastTargetValue, skip
-						# print("nextValue: ",nextValue)  # ," lastTargetValue: ",lastTargetValue[turn_or_move][axisIndex])
-						# if (turn_or_move in lastTargetValue) and (nextValue == lastTargetValue[turn_or_move][axisIndex]):
-						# 	continue
-						if delta < 0.01:
+					if keyframe_time < RANGESTARTFRAME:                # Respect the first scene frame
+						continue
+					for axisId, data in keyframeData.items():
+						# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
+						# axisId = keyframeData["axisId"]
+						value = data["value"]
+						if 'quaternion' in axisId:
 							continue
-						tweenCount += 1
-						if tweenCount == 1:     #  Header line is only written before the 1st tween
-							outFile.write(BONEHEADERLINE)
-						axisIndex = int(axisId[-1])
-						BOS = MakeLusTweenLineString(
-							turn_or_move,
-							bone_name,
-							axisIndex,    #last char in string, eg.: rotation_euler0 => 0
-							nextValue,
-							keyframe_time - SCENEFIRSTFRAME, # firstFrame, offset by the first frame in the scene
-							(nextKeyframeTime - SCENEFIRSTFRAME) if (nextKeyframeTime <= SCENELASTFRAME) \
-																else (SCENELASTFRAME - SCENEFIRSTFRAME), #lastFrame
-							variableSpeed=VARIABLESPEED,
-							indents=7,  # TODO: if ISWALK and not firstStep else 1,
-							delta=delta,
-							luaIdx=luaIdx,
-						)
-						# if firstKeyframe:
-						# 	lastTargetValue = {"move": [0] * 3, "turn": [0] * 3}  # Same as [0, 0, 0]
-						# 	firstKeyframe = False
-						# lastTargetValue[turn_or_move][axisIndex] = nextValue
-						luaIdx += 1
+						if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
+							continue
+						# Let's go through all next keys and try to find a match for this key type
+						foundNextKey = False
+						nextValue = value
+						nextKeyframeTime = keyframe_time
+						delta = 0
+						turn_or_move = 'turn' if ('rotation' in axisId) else 'move'
+						for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
+							nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
+							# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
+							if not axisId in nextKeyframeData.keys():
+								continue
+							nextKeyframeTime = keys_list[nextIdx][0]    # Gets the key of the next item (== keyframe_number)
+							if nextKeyframeTime > RANGELASTFRAME:
+								break
+							nextValue = nextKeyframeData[axisId]["value"]
+							delta = abs(nextValue - value)
+							print("AxisId: ", axisId, "Frame: ", keyframe_time, " - nextValue found: ", nextValue, ", delta: ", delta)
+							if axisId.startswith('location'):  # Move
+								turn_or_move = 'move'
+							foundNextKey = True
+							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+							break
 
-						if delta > 130 and turn_or_move == "turn":
-							gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
-								keyframe_time, bone_name)
-							print(gWarning)
-							BOS += '-- ' + gWarning + '\n'
+						if not foundNextKey:     # and i > 0:
+							print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
+						else:
+							if delta < 0.01:
+								continue
+							tweenCount += 1
+							if tweenCount == 1:     #  Header line is only written before the 1st tween
+								outFile.write(BONEHEADERLINE)
+							axisIndex = int(axisId[-1])
+							BOS = MakeLusTweenLineString(
+								turn_or_move,
+								bone_name,
+								axisIndex,    #last char in string, eg.: rotation_euler0 => 0
+								nextValue,
+								keyframe_time - RANGESTARTFRAME, # firstFrame, offset by the first frame in the scene
+								(nextKeyframeTime - RANGESTARTFRAME) if (nextKeyframeTime <= RANGELASTFRAME) \
+																	else (RANGELASTFRAME - RANGELASTFRAME), #lastFrame
+								variableSpeed=VARIABLESPEED,
+								indents=7,  # TODO: if ISWALK and not firstStep else 1,
+								delta=delta,
+								luaIdx=luaIdx,
+							)
+							# if firstKeyframe:
+							# 	lastTargetValue = {"move": [0] * 3, "turn": [0] * 3}  # Same as [0, 0, 0]
+							# 	firstKeyframe = False
+							# lastTargetValue[turn_or_move][axisIndex] = nextValue
+							luaIdx += 1
 
-						if not foundNextKey:
-							BOS += '-- ' + "Failed to find next value for bone " + bone_name + ', axis ' + axisId
+							if delta > 179.95 and turn_or_move == "turn":
+								gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
+									keyframe_time, bone_name)
+								print(gWarning)
+								BOS += '-- ' + gWarning + '\n'
 
-						# if frame_index > 0:
-						outFile.write(BOS + '\n')
-			if tweenCount > 0:      # Write bone's trailer line
-				outFile.write('\t\t\t\t\t\t   },\n')
+							if not foundNextKey:
+								BOS += '-- ' + "Failed to find next value for bone " + bone_name + ', axis ' + axisId
 
-		outFile.write('\t\t})\n')
-		## ## TODO: WIP
+							# if frame_index > 0:
+							outFile.write(BOS + '\n')
+				if tweenCount > 0:      # Write bone's trailer line
+					outFile.write('\t\t\t\t\t\t\t   },\n')
+			outFile.write('\t\t\t})\n')
+			outFile.write("end\n\n")
+			RANGESTARTFRAME = RANGELASTFRAME
 
 
 		# for frame_index, frame_time in enumerate(keyframe_times):
