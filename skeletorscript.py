@@ -917,7 +917,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 		newfile_name = filepath + ".bos_export.txt"
 		outf = open(newfile_name, 'w')
-		outf.write("// " + INFOSTRING + '\n')
+		outf.write("// " + INFOSTRING + '\n\n')
 		if VARIABLESCALE:
 			outf.write("#define MOVESCALE 100 //Higher values are bigger, 100 is default\n")
 		if VARIABLEAMPLITUDE:
@@ -1763,9 +1763,41 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				cmdLine = cmdLine + ' -- Possible unwanted rotation, keep deltas < 180 degrees (3.1399 rad)'
 			return cmdLine
 
+		def OutputPieceVariables():
+			tabs = '\t' * 5
+			arma = context.scene.objects['Armature']
+			outputText = ''
+			# for bone_name, keys_dic in bones.items():
+			for bone in arma.pose.bones:
+				bone_name = bone.name
+				if 'iktarget' in bone_name:
+					continue
+				outputText += "local "+bone_name+" = piece '"+bone_name+"'\n"
+			outputText += '\nVFS.Include("scripts/include/springtweener.lua")\n\n'
+			firstLine = True
+			for bone in arma.pose.bones:
+				bone_name = bone.name
+				if 'iktarget' in bone_name:
+					continue
+				line: str = "local scriptEnv = { " if firstLine else tabs
+				if firstLine:
+					firstLine = False
+				line = line + bone_name + " = " + bone_name + ",\n"
+				outputText += line
+			outputText += tabs + "rad = math.rad,\n" \
+                    + tabs + "x_axis = x_axis,\n" \
+                    + tabs + "y_axis = y_axis,\n" \
+                    + tabs + "z_axis = z_axis,\n" \
+                    + tabs + "Turn = Turn,\n" \
+                    + tabs + "Move = Move,\n" \
+                    + tabs + "Sleep = Sleep,\n" \
+                    + tabs + "initTween = initTween,\n" \
+					+ "}\n\n"
+			return outputText
+
 		newfile_name = filepath + ".lua_tween_export.lua"
 		outFile = open(newfile_name, 'w')
-		outFile.write("-- " + INFOSTRING + '\n')
+		outFile.write("-- " + INFOSTRING + '\n\n')
 		if VARIABLESCALE:
 			outFile.write("local MOVESCALE = 100 -- Higher values are bigger, 100 is default\n")
 		if VARIABLEAMPLITUDE:
@@ -1793,7 +1825,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		elif ISWALK:
 			outFile.write("local walking")
 		elif not ISDEATH:
-			outFile.write("local bAnimate\n")
+			# outFile.write("local bAnimate\n")
+			pass
 
 		# TODO
 		# speedMult = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
@@ -1854,10 +1887,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		print("\n\nMarkers' frames:\n")
 		print(markers)
 
-		RANGESTARTFRAME = 0
+		RANGESTARTFRAME = SCENEFIRSTFRAME
 		RANGELASTFRAME = SCENELASTFRAME
 		if len(markers) == 0:                       # Little hack so we always have at least one range
 			markers.append(SCENELASTFRAME)
+
+		# Creates the piece variables, eg: local left_arm1 = piece 'left_arm1'
+		outFile.write(OutputPieceVariables())
 
 		for i in range(len(markers)):
 			RANGELASTFRAME = markers[i]
@@ -1875,10 +1911,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					continue
 				keys_dic = dict(sorted(keys_dic.items()))
 				BONEHEADERLINE = "\t\t\t\t[" + bone_name + "]={\n"
-				print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
-				print(keys_dic)
-				# firstKeyframe = True
-				# lastTargetValue = {}
+				if FullDebug:
+					print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
+					print(keys_dic)
 				keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
 				keyframe_idx = -1
 				luaIdx = 1
@@ -1961,7 +1996,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							# if frame_index > 0:
 							outFile.write(BOS + '\n')
 				if tweenCount > 0:      # Write bone's trailer line
-					outFile.write('\t\t\t\t\t\t\t   },\n')
+					outFile.write('\t\t\t\t\t\t\t},\n')
 			outFile.write('\t\t\t})\n')
 			outFile.write("end\n\n")
 			RANGESTARTFRAME = RANGELASTFRAME
