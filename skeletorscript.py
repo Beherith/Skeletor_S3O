@@ -1883,14 +1883,15 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		markers = []
 		for m in context.scene.timeline_markers:
 			markers.append(m.frame)
+		markers.sort()
 
-		print("\n\nMarkers' frames:\n")
+		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Little hack so we always have at least one range
+			markers.append(SCENELASTFRAME)                      # also to add the last scene frame as a marker
+		print("\n\n\n\nMarkers' frames:\n")
 		print(markers)
 
 		RANGESTARTFRAME = SCENEFIRSTFRAME
 		RANGELASTFRAME = SCENELASTFRAME
-		if len(markers) == 0:                       # Little hack so we always have at least one range
-			markers.append(SCENELASTFRAME)
 
 		# Creates the piece variables, eg: local left_arm1 = piece 'left_arm1'
 		outFile.write(OutputPieceVariables())
