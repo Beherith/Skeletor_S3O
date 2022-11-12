@@ -751,9 +751,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 						animframes[frame_time][bone_name][ctarget + axis] = value
 
-		print(animframes)
-
-		print("Gathering piece hierarchy")
+		if FullDebug:
+			print("AnimFrames:\n", animframes)
+			print("\n\nGathering piece hierarchy")
 
 		def posebone_name_to_piece_name(posebone_name):
 			if 'iktarget' in bone.name:
@@ -774,9 +774,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 							piecehierarchy[parentname] = [piecename]
 						else:
 							piecehierarchy[parentname].append(piecename)
-		print('piecehierarchy', piecehierarchy)
-
-		print("Gathering IK chains")
+		if FullDebug:
+			print('piecehierarchy', piecehierarchy)
+			print("Gathering IK chains")
 
 		for bone in arm.pose.bones:
 			if 'iktarget' in bone.name:
@@ -788,7 +788,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
 					print(bone_name, 'has ik length', chainLength)
 					p = bone
 					while p is not None:
-						print("in chain: ", p.name)
+						if FullDebug:
+							print("in chain: ", p.name)
 						if p.name not in bonesinIKchains:
 							bonesinIKchains.append(p.name)
 						chainLength = chainLength - 1
@@ -798,13 +799,15 @@ class SkeletorBOSMaker(bpy.types.Operator):
 					print(bone_name, 'has ik length', chainLength)
 					p = bone
 					while chainLength > 0:
-						print("in chain: ", p.name)
+						if FullDebug:
+							print("in chain: ", p.name)
 						if p.name not in bonesinIKchains:
 							bonesinIKchains.append(p.name)
 						chainLength = chainLength - 1
 						p = p.parent
 
-		print("Gathering animdata")
+		if FullDebug:
+			print("Gathering animdata")
 
 		for frame_time in sorted(animframes.keys()):
 			print("SETTING FRAMETIME", frame_time)
@@ -1510,7 +1513,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if 'Armature' not in context.scene.objects:
 			return
 		arma = context.scene.objects['Armature']
-		print("whichframe: ", self.whichframe)
+		if FullDebug:
+			print("whichframe: ", self.whichframe)
 		self.whichframe += 1
 		props = {"location": "move", "rotation_euler": "turn"}
 		bonesWithCurves = []
@@ -1535,7 +1539,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if arma.animation_data is not None:
 			if arma.animation_data.action is not None:
 				curves = arma.animation_data.action.fcurves
-				print("Animdata: ", curves, arma.animation_data)
+				if FullDebug:
+					print("Animdata: ", curves, arma.animation_data)
 				for c in curves:
 					keyframes = c.keyframe_points
 					try:
@@ -1553,13 +1558,15 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						bone_name = bone_name[:-2]
 
 					cTarget = c.data_path.rpartition('.')[2]
-					# 'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget) \
+					# 'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget
 					#if FullDebug:
 					if 'euler' not in cTarget and 'location' not in cTarget:
-						print("Skipping: "+cTarget)
-						continue
+						if FullDebug:
+							print("Skipping: "+cTarget)
+							continue
 					else:
-						print("Keeping: "+cTarget)
+						if FullDebug:
+							print("Keeping: "+cTarget)
 
 					axis = str(c.array_index)
 
@@ -1580,13 +1587,42 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 						keysPerBone[bone_name][frame_time][axisId] = keyframeData.copy()
 
-		# if FullDebug:
-		# 	print(animframes)
+		print("\n\n\n\n\n\n### Visibility keys\n")
+		#### TODO: Go through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
+		#### its meshFromBone.animation_data, search *only* for "hide_viewport" channels
+		#### Assign that info to keysPerBone
 
-		print("\n\n\### Keys Per Bone (for the Tween Export)\n")
-		print(keysPerBone)
+		for bone_name in keysPerBone:
+			meshFromBone = context.scene.objects[bone_name]  # same name as the bone
+			if meshFromBone.animation_data is None:
+				print("skipping (no visibility anim): "+meshFromBone.name)
+				continue
+			curves = meshFromBone.animation_data.action.fcurves
+			# print("Visibility Animdata: ", curves, meshFromBone.animation_data)
+			for c in curves:
+				keyframes = c.keyframe_points
+				cTarget = c.data_path.rpartition('.')[2]
+				if 'hide_viewport' not in cTarget:
+					print("Non-visibility channel being skipped: " + cTarget + " on mesh "+ meshFromBone.name)
+					continue
+				else:
+					print("Animated visibility found for mesh: " + meshFromBone.name)
+				for i, k in enumerate(keyframes):
+					frame_time = int(k.co[0])
+					value = float(k.co[1])
+					print("\t\tframe: "+str(frame_time)+", value: "+str(value))
+					if i > 0:
+						previous_value = float(keyframes[i-1].co[1])
+						if previous_value != value:
+							print("\t\t\tDelta value found at frame: "+str(frame_time)+" value: "+str(value))
+							if frame_time not in keysPerBone[bone_name]:
+								keysPerBone[bone_name][frame_time] = {}
+							keysPerBone[bone_name][frame_time]["hide_viewport"] = { 'value': value }
 
-		print("\n\nGathering piece hierarchy\n")
+		if FullDebug:
+			print("\n\n\### Keys Per Bone (for the Tween Export)\n")
+			print(keysPerBone)
+			print("\n\nGathering piece hierarchy\n")
 
 		def posebone_name_to_piece_name(poseBone_name):
 			if 'iktarget' in bone.name:
@@ -1607,7 +1643,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							pieceHierarchy[parentName] = [pieceName]
 						else:
 							pieceHierarchy[parentName].append(pieceName)
-		print('\n\npiecehierarchy: \n', pieceHierarchy)
+
+		if FullDebug:
+			print('\n\npiecehierarchy: \n', pieceHierarchy)
 
 		if FullDebug:
 			print("\n\nGathering IK chains\n")
@@ -1637,7 +1675,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							chainLength = chainLength - 1
 							p = p.parent
 
-		print("Gathering animdata")
+		if FullDebug:
+			print("Gathering animdata")
 
 		#for frame_time in sorted(animframes.keys()):
 		for bone in arma.pose.bones:
@@ -1670,7 +1709,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 				rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
 				rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
-				print(rotation_text)
+				if FullDebug:
+					print(rotation_text)
 
 				# if frame_time not in keysPerBone[bone_name]:
 				# 	keysPerBone[bone_name][frame_time] = {}
@@ -1687,12 +1727,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					for axis, value in enumerate(rot[0:3]):
 						axisId = 'rot' + str(axis)
 						value = degrees(value)
-						print('adding', frame_time, bone_name, 'rot' + str(axis), value)
+						if FullDebug:
+							print('adding', frame_time, bone_name, 'rot' + str(axis), value)
 						keysPerBone[bone_name][frame_time][axisId] = { "value": value }
 						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(value)
 
-		if FullDebug:
-			print("\n\n\nKeyframes Per Bone: ", keysPerBone)
+		print("\n\n\nKeyframes Per Bone: ", keysPerBone)
 		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy)
 		if FullDebug:
 			print("Bones in IKchains: ", bonesInIkChains)
@@ -1738,12 +1778,19 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
 		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
 
-		def MakeLusTweenLineString(turnOrMove, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7,
-		                      delta=0, luaIdx=0):
-			axisName = BOSAXIS[axisIndex]
-			targetValue = targetValue * blender_to_bos_axis_multiplier[turnOrMove][axisIndex]
+		def MakeLusTweenLineString(cmdID, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7,
+		                           delta=0, luaIdx=0):
 			cmdLine = '' + '\t' * indents
-			cmdLine = cmdLine + '['+str(luaIdx)+']={cmd="' + turnOrMove + '", '
+			if cmdID == "hide_viewport":
+				if targetValue == 1:
+					cmdLine = cmdLine + '[' + str(luaIdx) + ']={cmd="hide", '
+				else:
+					cmdLine = cmdLine + '[' + str(luaIdx) + ']={cmd="show", '
+				cmdLine = cmdLine + "firstFrame=" + str(firstFrame) + ",},"
+				return cmdLine
+			axisName = BOSAXIS[axisIndex]
+			targetValue = targetValue * blender_to_bos_axis_multiplier[cmdID][axisIndex]
+			cmdLine = cmdLine + '[' + str(luaIdx) +']={cmd="' + cmdID + '", '
 			cmdLine = cmdLine + 'axis=' + axisName + ', targetValue='
 			cmdLine = cmdLine + floatFormat % targetValue + ', '
 			# if turnOrMove == 'turn':
@@ -1759,7 +1806,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			cmdLine = cmdLine + '},'
 			if delta != 0 and not OMITDELTAOUTPUT:
 				cmdLine = cmdLine + ' -- delta=%.2f'%delta
-			if turnOrMove == "turn" and abs(delta) > 3.1399:
+			if cmdID == "turn" and abs(delta) > 3.1399:
 				cmdLine = cmdLine + ' -- Possible unwanted rotation, keep deltas < 180 degrees (3.1399 rad)'
 			return cmdLine
 
@@ -1795,7 +1842,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					+ "}\n\n"
 			return outputText
 
-		newfile_name = filepath + ".lua_tween_export.lua"
+		newfile_name = filepath + ".tween_export.lua"
 		outFile = open(newfile_name, 'w')
 		outFile.write("-- " + INFOSTRING + '\n\n')
 		if VARIABLESCALE:
@@ -1885,7 +1932,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			markers.append(m.frame)
 		markers.sort()
 
-		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Little hack so we always have at least one range
+		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Minor hack so we always have at least one range
 			markers.append(SCENELASTFRAME)                      # also to add the last scene frame as a marker
 		print("\n\n\n\nMarkers' frames:\n")
 		print(markers)
@@ -1902,12 +1949,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				break
 			if RANGELASTFRAME < SCENEFIRSTFRAME:      # Respect the first scene frame
 				continue
+
 			print("\n\n\nMarker Range: " + str(RANGESTARTFRAME) + " to " + str(RANGELASTFRAME))
 			outFile.write("local function anim"+str(i+1)+"()\n")    # Let's do anim1..n to match lua's indexing
+
 			#### ACTUAL TWEEN EXPORT
 			outFile.write("\tinitTween({veryLastFrame="+str(RANGELASTFRAME - RANGESTARTFRAME)+",\n")
 			for bone_name, keys_dic in keysPerBone.items():
-				tweenCount = 0
 				if len(keys_dic.items()) == 0:      # skip bones with no keyframes
 					continue
 				keys_dic = dict(sorted(keys_dic.items()))
@@ -1916,30 +1964,49 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					print("\n\nBone: ", bone_name, "\nKeys_dic:\n")
 					print(keys_dic)
 				keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
-				keyframe_idx = -1
-				luaIdx = 1
+				keyframe_idx = -1   # this is for every keyframe
+				luaIdx = 1          # this is for actually valid/exported keyframes
 				for keyframe_time, keyframeData in keys_dic.items():
 					keyframe_idx += 1   # Starts from idx=0
-					if keyframe_idx >= len(keys_dic)-1:               # Only run up to the previous to last key
-						break  # continue
 					if not (keyframe_time <= RANGELASTFRAME):          # Must respect the final scene frame
 						break
 					if keyframe_time < RANGESTARTFRAME:                # Respect the first scene frame
 						continue
+					# "hide_viewport" mesh key support; only one entry allowed per bone/frame
+					if "hide_viewport" in keyframeData:
+						value = keyframeData["hide_viewport"]["value"]
+						BOS = MakeLusTweenLineString(
+							'hide_viewport',
+							bone_name,
+							0,                                  # axisIndex; unused by hide_viewport
+							value,
+							keyframe_time - RANGESTARTFRAME,    # firstFrame, offset by the first frame in the scene
+							keyframe_time,                      # unused by hide_viewport
+							variableSpeed=VARIABLESPEED,
+							indents=7,
+							delta=0,
+							luaIdx=luaIdx,
+						)
+						if luaIdx == 1:     #  Header line is only written before the 1st tween
+							outFile.write(BONEHEADERLINE)
+						outFile.write(BOS + '\n')
+						luaIdx += 1
+					if keyframe_idx >= len(keys_dic)-1:               # Only check tweens up to the previous to last key
+						break  # continue
+
 					for axisId, data in keyframeData.items():
-						# TODO: print("== bone: ", bone_name, ", axisId: "+axisId)
 						# axisId = keyframeData["axisId"]
 						value = data["value"]
+						delta = 0
+						nextValue = value
+						cmdID = 'turn' if 'rotation' in axisId else 'move'
 						if 'quaternion' in axisId:
 							continue
 						if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
 							continue
 						# Let's go through all next keys and try to find a match for this key type
 						foundNextKey = False
-						nextValue = value
 						nextKeyframeTime = keyframe_time
-						delta = 0
-						turn_or_move = 'turn' if ('rotation' in axisId) else 'move'
 						for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
 							nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
 							# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
@@ -1950,24 +2017,26 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 								break
 							nextValue = nextKeyframeData[axisId]["value"]
 							delta = abs(nextValue - value)
-							print("AxisId: ", axisId, "Frame: ", keyframe_time, " - nextValue found: ", nextValue, ", delta: ", delta)
+							if FullDebug:
+								print("AxisId: ", axisId, "Frame: ", keyframe_time, " - nextValue found: ", nextValue, ", delta: ", delta)
 							if axisId.startswith('location'):  # Move
-								turn_or_move = 'move'
+								cmdID = 'move'
 							foundNextKey = True
-							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": turn_or_move, "delta": delta }
+							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": cmdID, "delta": delta }
 							break
 
 						if not foundNextKey:     # and i > 0:
-							print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
+							if FullDebug:
+								print("Warning: Failed to find next key value for bone: ", bone_name, ', axis:', axisId, ', frame:', keyframe_time)
 						else:
 							if delta < 0.01:
 								continue
-							tweenCount += 1
-							if tweenCount == 1:     #  Header line is only written before the 1st tween
+							#tweenCount += 1
+							if luaIdx == 1:     #  Header line is only written before the 1st tween
 								outFile.write(BONEHEADERLINE)
 							axisIndex = int(axisId[-1])
 							BOS = MakeLusTweenLineString(
-								turn_or_move,
+								cmdID,
 								bone_name,
 								axisIndex,    #last char in string, eg.: rotation_euler0 => 0
 								nextValue,
@@ -1979,13 +2048,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 								delta=delta,
 								luaIdx=luaIdx,
 							)
-							# if firstKeyframe:
-							# 	lastTargetValue = {"move": [0] * 3, "turn": [0] * 3}  # Same as [0, 0, 0]
-							# 	firstKeyframe = False
-							# lastTargetValue[turn_or_move][axisIndex] = nextValue
 							luaIdx += 1
 
-							if delta > 179.95 and turn_or_move == "turn":
+							if delta > 179.95 and cmdID == "turn":
 								gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
 									keyframe_time, bone_name)
 								print(gWarning)
@@ -1996,7 +2061,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 							# if frame_index > 0:
 							outFile.write(BOS + '\n')
-				if tweenCount > 0:      # Write bone's trailer line
+				if luaIdx > 1:      # Write bone's trailer line
 					outFile.write('\t\t\t\t\t\t\t},\n')
 			outFile.write('\t\t\t})\n')
 			outFile.write("end\n\n")
@@ -2188,8 +2253,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			# 		outFile.write("\t\tspeedMult, sleepTime = GetSpeedParams()\n")
 			# 		firstStep = False
 
-		if ISWALK:
-			outFile.write('\tend\n')
+		# TODO / check:
+		# if ISWALK:
+		# 	outFile.write('\tend\n')
 
 		outFile.write('end\n')
 
