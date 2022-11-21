@@ -47,6 +47,7 @@ from bpy.types import (Panel,
 					   )
 
 OMITDELTAOUTPUT = True # <= Hide the -- delta comments at the ends of the lines, to reduce fileSize
+ROTATION_MODE = "YXZ"
 FullDebug = False
 
 class MySettings(PropertyGroup):
@@ -261,7 +262,7 @@ class SkeletorRotator(bpy.types.Operator):
 		scene = context.scene
 		for obj in scene.objects:
 			obj.select_set(True)
-			obj.rotation_mode = 'YXZ'  # Was: 'ZXY'
+			obj.rotation_mode = ROTATION_MODE
 		bpy.ops.object.select_all(action='DESELECT')
 
 		rootObject, rootName = getS3ORootObject()
@@ -411,7 +412,7 @@ class SkeletorOperator(bpy.types.Operator):
 		scene = context.scene
 		for obj in scene.objects:
 			obj.select_set(False)
-			obj.rotation_mode = 'YXZ'  # was: 'ZXY'
+			obj.rotation_mode = ROTATION_MODE
 
 		# add an armature!
 		print("====Creating Armature====")
@@ -423,7 +424,7 @@ class SkeletorOperator(bpy.types.Operator):
 		armature_object.data.show_axes = True
 		armature_object.data.show_names = True
 
-		armature_object.rotation_mode = 'YXZ'  # was: 'ZXY'
+		armature_object.rotation_mode = ROTATION_MODE
 
 		context.collection.objects.link(armature_object)
 
@@ -548,7 +549,7 @@ class SkeletorOperator(bpy.types.Operator):
 		if AUTOADDIK:
 			for name, piece in pieces.items():
 				if not piece.isAimXY:
-					armature_object.pose.bones[piece.bonename].rotation_mode = 'YXZ'  # was: 'ZXY'
+					armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE  # ROTATION_MODE = 'YXZ'  # was: 'ZXY'
 
 				if piece.iktarget is not None and piece.parent is not None:
 					chainlength = 1
@@ -562,6 +563,9 @@ class SkeletorOperator(bpy.types.Operator):
 					constraint.subtarget = 'iktarget.' + piece.bonename
 					constraint.chain_count = chainlength
 					armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99  # avoids having to create knee poles
+		else:
+			for name, piece in pieces.items():
+				armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE  # was: 'ZXY'
 
 		print("=====Parenting meshes to bones=======")
 		# getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
