@@ -1947,7 +1947,10 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# Creates the piece variables, eg: local left_arm1 = piece 'left_arm1'
 		outFile.write(OutputPieceVariables())
 
+		animID = 0		# anim1, anim2, etc
 		for i in range(len(markers)):
+			if markers[i] == SCENEFIRSTFRAME:		  # Skips a marker coincident with the first scene frame
+				continue
 			RANGELASTFRAME = markers[i]
 			if RANGELASTFRAME > SCENELASTFRAME:       # Must respect the final scene frame
 				break
@@ -1955,7 +1958,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				continue
 
 			print("\n\n\nMarker Range: " + str(RANGESTARTFRAME) + " to " + str(RANGELASTFRAME))
-			outFile.write("local function anim"+str(i+1)+"()\n")    # Let's do anim1..n to match lua's indexing
+			outFile.write("local function anim"+str(animID+1)+"()\n")    # Let's do anim1..n to match lua's indexing
+			animID += 1
 
 			#### ACTUAL TWEEN EXPORT
 			outFile.write("\tinitTween({veryLastFrame="+str(RANGELASTFRAME - RANGESTARTFRAME)+",\n")
@@ -2261,7 +2265,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# if ISWALK:
 		# 	outFile.write('\tend\n')
 
-		outFile.write('end\n')
+		# outFile.write('end\n')
 
 		if not ISDEATH:
 			suffix = ' * speedMult)\n' if VARIABLESPEED else ')\n'
