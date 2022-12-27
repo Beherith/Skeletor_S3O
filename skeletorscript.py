@@ -91,6 +91,11 @@ class MySettings(PropertyGroup):
 		description="Unit dies, move pieces far to explode them",
 		default=False
 	)
+	assimp_workflow: BoolProperty(
+		name="Assimp Workflow",
+		description="Creates bones aligned to local space, export with Blender axis-rotation system",
+		default=False
+	)
 
 
 class Skelepanel(bpy.types.Panel):
@@ -119,6 +124,7 @@ class Skelepanel(bpy.types.Panel):
 		layout.prop(mytool, "varamplitude", text="Variable amplitude")
 		layout.prop(mytool, "firstframestance", text="First Frame Stance")
 		layout.prop(mytool, "is_death", text="Is Death Script")
+		layout.prop(mytool, "assimp_workflow", text="Assimp Workflow")
 		row = layout.row()
 		row.operator('skele.skeletorbosmaker', text='2. Create BOS')
 		row = layout.row()
@@ -316,6 +322,7 @@ class SkeletorOperator(bpy.types.Operator):
 		NOTAIL = True
 		IKTARGETENDS = context.scene.my_tool.iktargetends
 		AUTOADDIK = context.scene.my_tool.autoaddik
+		ASSIMP = context.scene.my_tool.assimp_workflow
 
 		# debug delete all armatures and bones!
 		# bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -460,8 +467,8 @@ class SkeletorOperator(bpy.types.Operator):
 			else:
 				newbone = arm_data.edit_bones.new(piece.bonename)
 			newbone.name = piece.bonename
-
 			newbone.head = piece.worldpos
+
 			# if AUTOADDIK:
 			if NOTAIL:
 				newbone.tail = newbone.head + Vector((0, 5, 0))
@@ -474,7 +481,7 @@ class SkeletorOperator(bpy.types.Operator):
 				tailpos = tailpos / len(piece.children)
 				newbone.tail = tailpos
 				if NOTAIL:
-					newbone.tail = newbone.head + Vector((0, 5, 0))  # TODO fixeme
+					newbone.tail = newbone.head + Vector((0, 5, 0))  # TODO fixme
 				# TODO: Something is an arm if it has only nomesh children
 				# thus we add a forward pointing IK target to its tailpos
 				onlyemptychildren = True
@@ -528,17 +535,37 @@ class SkeletorOperator(bpy.types.Operator):
 				else:
 					tailpos = piece.worldpos + Vector((0, 5, 0))
 			newbone.tail = tailpos
+
 			# TODO: easier rotations like this?
+			# This is where the world axis is always assigned to the bones rotations
 			if NOTAIL:
 				newbone.tail = newbone.head + Vector((0, 5, 0))
 
-			print("trying to add bone to %s\nat head:%s \ntail:%s" % (piece, newbone.head, newbone.tail))
-			piece.bone = newbone
+			if ASSIMP:
+				# x, y, z = newbone.matrix.to_3x3().col
+				# # rotation matrix 30 degrees around local x axis thru head
+				# R = (Matrix.Translation(newbone.head) @
+				# 	 Matrix.Rotation(radians(30), 4, x) @
+				# 	 Matrix.Translation(-newbone.head)
+				# 	 )
+				# # bone.matrix = R @ bone.matrix
+				# bone.transform(R)
+				old_head = newbone.head.copy()
+				R = (Matrix.Rotation(radians(45), 4, newbone.x_axis.normalized()) @
+					 Matrix.Rotation(radians(45), 4, newbone.z_axis.normalized())
+					)
+				newbone.transform(R, roll=False)
+				offset_vec = -(newbone.head - old_head)
+				newbone.head += offset_vec
+				newbone.tail += offset_vec
+
+		print("trying to add bone to %s\nat head:%s \ntail:%s" % (piece, newbone.head, newbone.tail))
+		piece.bone = newbone
 		# return
 		print("=====Reparenting Bone-Bones=======")
 
 		for name, piece in pieces.items():
-			if piece.parent is not None and not piece.isAimXY:
+			if not getattr(piece.parent, "name", "None") and piece.parent is not None and not piece.isAimXY:
 				piece.bone.parent = piece.parent.bone
 
 		bpy.ops.object.editmode_toggle()  # I have no idea what I'm doing
