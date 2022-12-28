@@ -559,45 +559,20 @@ class SkeletorOperator(bpy.types.Operator):
 				# bone.transform(R)
 				old_head = newbone.head.copy()
 
-				# TODO: (WIP) Get local matrix of parented object
-				# if obj.rotation_mode == 'QUATERNION':
-				# 	matrix = mathutils.Matrix.LocRotScale(obj.location, obj.rotation_quaternion, obj.scale)
-				# else:
-				#	matrix = mathutils.Matrix.LocRotScale(obj.location, obj.rotation_euler, obj.scale)
-
-				#R = mathutils.Matrix.LocRotScale(piece.object.location, piece.object.rotation_euler, piece.object.scale)
-
+				# Get local matrix of object
 				obj = piece.object
-				# # Store a copy of the objects final transformation
-				# # so we can read from it later.
-				#matrix_orig = obj.matrix_local.copy()
 				R = obj.matrix_world
+				#pos, rot, scl = R.decompose()
 
-				pos, rot, scl = R.decompose()
-
-				#if not obj.parent is None:
-					# # Reset parent inverse matrix.
-					# # (relationship created when parenting)
-					# obj.matrix_parent_inverse.identity()
-					#
-					# # Re-apply the difference between parent/child
-					# # (this writes directly into the loc/scale/rot) via a matrix.
-					#obj.matrix_basis = obj.parent.matrix_local.inverted() # @ matrix_orig
-					#
-					#R = obj.matrix_local
-
+				# That's how you'd apply individual rotations, but that's not needed for our purpose
 				# R = (Matrix.Rotation(rot[0], 4, newbone.y_axis.normalized()) @  # newbone.y_axis.normalized()
 				# 	 Matrix.Rotation(rot[1], 4, newbone.x_axis.normalized()) @  # newbone.x_axis.normalized()
 				# 	 Matrix.Rotation(rot[2], 4, newbone.z_axis.normalized())  # newbone.z_axis.normalized()
 				# 	)
+				#newbone.transform(R, roll=False)
 
 				newbone.matrix = R
-				#newbone.transform(R, roll=False)
 				bpy.context.view_layer.update()
-				#newbone.head = pos
-				#offset_vec = -(newbone.head - old_head)
-				#newbone.head += offset_vec
-				#newbone.tail += offset_vec
 
 			print("trying to add bone to %s\nat head:%s \ntail:%s" % (piece, newbone.head, newbone.tail))
 			piece.bone = newbone
