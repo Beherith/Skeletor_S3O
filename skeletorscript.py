@@ -1232,6 +1232,7 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 		FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
 		VARIABLESCALE = context.scene.my_tool.varscale
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
+		ASSIMP = context.scene.my_tool.assimp_workflow
 
 		move_variable = '%.6f'
 		turn_variable = '%.6f'
@@ -1243,12 +1244,12 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 			move_variable = "((" + move_variable + " *animAmplitude)/100)"
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
-		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
+		LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
 		blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
 
 		def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
 							  delta=0):
-			axisname = BOSAXIS[axisindex]
+			axisname = LUSAXIS[axisindex]
 			targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex]
 			cmdline = '' + '\t' * indents
 			cmdline = cmdline + turn_or_move + '('
@@ -1396,8 +1397,8 @@ local function Animate() -- %s
 						pass
 					# sleeptime = sleepperframe * (keyframe_times[i] - keyframe_times[prevframe])
 
-					axis_index = int(axis[-1])
-					# blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
+					axis_index = int(axis[-1])	# last char, eg: rotation0 => 0
+					# blender_to_bos_axis_multiplier = [-1.0, 1.0, 1.0]  # for turns
 					if abs(value - prevvalue) < 0.1:
 						print("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevvalue))
 						continue
@@ -1423,7 +1424,7 @@ local function Animate() -- %s
 						turn_or_move = 'Turn'
 						if axis.startswith('location'):  # Move
 							turn_or_move = 'Move'
-						stopwalking_cmd = '%s(%s, %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
+						stopwalking_cmd = '%s(%s, %s' % (turn_or_move, bone_name, LUSAXIS[axis_index])
 
 						if FIRSTFRAMESTANCE and frame_index == 0:
 							firstframestance_positions[stopwalking_cmd] = value * \
@@ -1438,7 +1439,8 @@ local function Animate() -- %s
 							stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
 						rotations_sum += abs(value - prevvalue)
 
-						BOS = MakeBOSLineString(
+						# "MakeBOSLineString" is an override, don't refactor / rename it
+						LUS = MakeBOSLineString(
 							turn_or_move,
 							bone_name,
 							axis_index,
@@ -1453,13 +1455,13 @@ local function Animate() -- %s
 							gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
 								frame_time, bone_name)
 							print(gwarn)
-							BOS += '-- ' + gwarn + '\n'
+							LUS += '-- ' + gwarn + '\n'
 
 						if not foundprev:
-							BOS += '-- ' + "Failed to find previous position for bone" + bone_name + 'axis' + axis
+							LUS += '-- ' + "Failed to find previous position for bone" + bone_name + 'axis' + axis
 
 						if frame_index > 0:
-							outf.write(BOS + '\n')
+							outf.write(LUS + '\n')
 
 			if frame_index > 0:
 
@@ -1641,7 +1643,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		for bone_name in keysPerBone:
 			meshFromBone = context.scene.objects[bone_name]  # same name as the bone
-			if meshFromBone.animation_data is None:
+			if meshFromBone.animation_data is None or meshFromBone.animation_data.action is None:
 				print("skipping (no visibility anim): "+meshFromBone.name)
 				continue
 			curves = meshFromBone.animation_data.action.fcurves
@@ -1804,6 +1806,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		ISWALK = context.scene.my_tool.is_walk
 		ISDEATH = context.scene.my_tool.is_death
+		ASSIMP = context.scene.my_tool.assimp_workflow
 		VARIABLESPEED = context.scene.my_tool.varspeed
 		FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
 		VARIABLESCALE = context.scene.my_tool.varscale
@@ -1822,8 +1825,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			move_variable = "((" + move_variable + " *animAmplitude)/100)"
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
-		BOSAXIS = ['x_axis', 'z_axis', 'y_axis']
-		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
+		# LUSAXIS = ['x_axis', 'z_axis', 'y_axis']
+		LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
+		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0]}
 
 		def MakeLusTweenLineString(cmdID, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7,
 		                           delta=0, luaIdx=0):
@@ -1835,7 +1839,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					cmdLine = cmdLine + '[' + str(luaIdx) + ']={cmd="show", '
 				cmdLine = cmdLine + "firstFrame=" + str(firstFrame) + ",},"
 				return cmdLine
-			axisName = BOSAXIS[axisIndex]
+			axisName = LUSAXIS[axisIndex]
 			targetValue = targetValue * blender_to_bos_axis_multiplier[cmdID][axisIndex]
 			cmdLine = cmdLine + '[' + str(luaIdx) +']={cmd="' + cmdID + '", '
 			cmdLine = cmdLine + 'axis=' + axisName + ', targetValue='
@@ -1974,9 +1978,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 
-		markers = []
+		markers = []		 #	Just a vector with frames
+		markerNames = {}	 #	{ frame:name, ... }
+		animNames = []		 #	Final list of animation names (since they won't always be marker-names)
 		for m in context.scene.timeline_markers:
 			markers.append(m.frame)
+			markerNames[m.frame] = m.name
 		markers.sort()
 
 		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Minor hack so we always have at least one range
@@ -1991,17 +1998,23 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		outFile.write(OutputPieceVariables())
 
 		animID = 0		# anim1, anim2, etc
+
+		outFile.write("-- #=#=# Animations: \n\n")
 		for i in range(len(markers)):
-			if markers[i] == SCENEFIRSTFRAME:		  # Skips a marker coincident with the first scene frame
+			if markers[i] == SCENEFIRSTFRAME:			# Skips a marker coincident with the first scene frame
 				continue
 			RANGELASTFRAME = markers[i]
-			if RANGELASTFRAME > SCENELASTFRAME:       # Must respect the final scene frame
+			if RANGELASTFRAME > SCENELASTFRAME:			# Must respect the final scene frame
 				break
-			if RANGELASTFRAME < SCENEFIRSTFRAME:      # Respect the first scene frame
+			if RANGELASTFRAME < SCENEFIRSTFRAME:		# Respect the first scene frame
 				continue
 
 			print("\n\n\nMarker Range: " + str(RANGESTARTFRAME) + " to " + str(RANGELASTFRAME))
-			outFile.write("local function anim"+str(animID+1)+"()\n")    # Let's do anim1..n to match lua's indexing
+			markerName = "anim"+str(animID+1)			# Let's do anim1..n to match lua's indexing
+			if markerNames[RANGELASTFRAME] is not None:
+				markerName = markerNames[RANGELASTFRAME]
+			animNames.append(markerName)
+			outFile.write("local function "+markerName+"()\n")
 			animID += 1
 
 			#### ACTUAL TWEEN EXPORT
@@ -2115,7 +2128,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				if luaIdx > 1:      # Write bone's trailer line
 					outFile.write('\t\t\t\t\t\t\t},\n')
 			outFile.write('\t\t\t})\n')
-			outFile.write("end\n\n")
+			outFile.write("end\n")
 			RANGESTARTFRAME = RANGELASTFRAME
 
 
@@ -2308,7 +2321,15 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# if ISWALK:
 		# 	outFile.write('\tend\n')
 
-		# outFile.write('end\n')
+		animsLine = "\nlocal Animations = {"
+		for i in range(len(animNames)):
+			animName = animNames[i]
+			animsLine = animsLine + animName + " = " + animName + ", "
+		animsLine += "}\n\nreturn Animations\n"
+		outFile.write(animsLine)
+
+		# Animations = {openstd = openstd, closestd = closestd, morphup = morphup, openadv = openadv, closeadv = closeadv}
+		# return Animations
 
 		if not ISDEATH:
 			suffix = ' * speedMult)\n' if VARIABLESPEED else ')\n'
@@ -2324,7 +2345,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			else:
 				if VARIABLESPEED:
 					outFile.write('-- Call this from MotionControl()!\n')
-				outFile.write('local function StopAnimation()\n')
+				# outFile.write('local function StopAnimation()\n')		# Temporarily disabled
 			for restore in sorted(stopwalking_maxspeed.keys()):
 				if FIRSTFRAMESTANCE:
 					stance_position = 0
@@ -2357,7 +2378,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							outFile.write('\t' + restore + ', 0, %.6f' % (
 									stopwalking_maxspeed[restore] * 10) + suffix)
 
-			outFile.write('end\n')
+			# outFile.write('end\n')
 
 		if ISWALK and VARIABLESPEED:
 			outFile.write("""
