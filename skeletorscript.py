@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "Skeletor_S3O SpringRTS (.s3o)",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (0, 4, 0),
+	"version": (0, 4, 1),
 	"blender": (2, 80, 0),
 	"location": "3D View > Side panel",
 	"description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -96,6 +96,11 @@ class MySettings(PropertyGroup):
 		description="Creates bones aligned to local space, export with Blender axis-rotation system",
 		default=False
 	)
+	skinning: BoolProperty(
+		name="Skinning",
+		description="Don't require bones to be created by Skeletor, useful for skinning export. Use it with the Assimp workflow option",
+		default=False
+	)
 
 
 class Skelepanel(bpy.types.Panel):
@@ -125,6 +130,7 @@ class Skelepanel(bpy.types.Panel):
 		layout.prop(mytool, "firstframestance", text="First Frame Stance")
 		layout.prop(mytool, "is_death", text="Is Death Script")
 		layout.prop(mytool, "assimp_workflow", text="Assimp Workflow")
+		layout.prop(mytool, "skinning", text="Export for Skinning")
 		row = layout.row()
 		row.operator('skele.skeletorbosmaker', text='2. Create BOS')
 		row = layout.row()
@@ -1559,9 +1565,16 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 	def tobos(self, context):
 		print("MAKING LUS TWEEN, LIKE A BOSS!")
 		scene = context.scene
-		if 'Armature' not in context.scene.objects:
+		for obj in bpy.data.objects:
+			if obj.type == 'ARMATURE':
+				arma = obj
+		if arma is None:
+			print("ERROR: Armature not found! Quitting.")
 			return
-		arma = context.scene.objects['Armature']
+		# if 'Armature' not in context.scene.objects:
+		# 	print("ERROR: Armature not found! Quitting.")
+		# 	return
+		# arma = context.scene.objects['Armature']
 		if FullDebug:
 			print("whichframe: ", self.whichframe)
 		self.whichframe += 1
@@ -1637,36 +1650,39 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						keysPerBone[bone_name][frame_time][axisId] = keyframeData.copy()
 
 		print("\n\n\n\n\n\n### Visibility keys\n")
-		#### TODO: Go through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
+		#### Goes through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
 		#### its meshFromBone.animation_data, search *only* for "hide_viewport" channels
 		#### Assign that info to keysPerBone
 
-		for bone_name in keysPerBone:
-			meshFromBone = context.scene.objects[bone_name]  # same name as the bone
-			if meshFromBone.animation_data is None or meshFromBone.animation_data.action is None:
-				print("skipping (no visibility anim): "+meshFromBone.name)
-				continue
-			curves = meshFromBone.animation_data.action.fcurves
-			# print("Visibility Animdata: ", curves, meshFromBone.animation_data)
-			for c in curves:
-				keyframes = c.keyframe_points
-				cTarget = c.data_path.rpartition('.')[2]
-				if 'hide_viewport' not in cTarget:
-					print("Non-visibility channel being skipped: " + cTarget + " on mesh "+ meshFromBone.name)
+		SKINNING = context.scene.my_tool.skinning
+
+		if not SKINNING:
+			for bone_name in keysPerBone:
+				meshFromBone = context.scene.objects[bone_name]  # same name as the bone
+				if meshFromBone.animation_data is None or meshFromBone.animation_data.action is None:
+					print("skipping (no visibility anim): "+meshFromBone.name)
 					continue
-				else:
-					print("Animated visibility found for mesh: " + meshFromBone.name)
-				for i, k in enumerate(keyframes):
-					frame_time = int(k.co[0])
-					value = float(k.co[1])
-					print("\t\tframe: "+str(frame_time)+", value: "+str(value))
-					if i > 0:
-						previous_value = float(keyframes[i-1].co[1])
-						if previous_value != value:
-							print("\t\t\tDelta value found at frame: "+str(frame_time)+" value: "+str(value))
-							if frame_time not in keysPerBone[bone_name]:
-								keysPerBone[bone_name][frame_time] = {}
-							keysPerBone[bone_name][frame_time]["hide_viewport"] = { 'value': value }
+				curves = meshFromBone.animation_data.action.fcurves
+				# print("Visibility Animdata: ", curves, meshFromBone.animation_data)
+				for c in curves:
+					keyframes = c.keyframe_points
+					cTarget = c.data_path.rpartition('.')[2]
+					if 'hide_viewport' not in cTarget:
+						print("Non-visibility channel being skipped: " + cTarget + " on mesh "+ meshFromBone.name)
+						continue
+					else:
+						print("Animated visibility found for mesh: " + meshFromBone.name)
+					for i, k in enumerate(keyframes):
+						frame_time = int(k.co[0])
+						value = float(k.co[1])
+						print("\t\tframe: "+str(frame_time)+", value: "+str(value))
+						if i > 0:
+							previous_value = float(keyframes[i-1].co[1])
+							if previous_value != value:
+								print("\t\t\tDelta value found at frame: "+str(frame_time)+" value: "+str(value))
+								if frame_time not in keysPerBone[bone_name]:
+									keysPerBone[bone_name][frame_time] = {}
+								keysPerBone[bone_name][frame_time]["hide_viewport"] = { 'value': value }
 
 		if FullDebug:
 			print("\n\n\### Keys Per Bone (for the Tween Export)\n")
@@ -1738,7 +1754,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			if bone_name not in keysPerBone:
 				continue
 
-			#for bone in arma.pose.bones:
 			for frame_time in keysPerBone[bone_name]:    # sorted(keysPerBone[bone_name].keys()):
 				if FullDebug:
 					print("SETTING FRAMETIME", frame_time)
@@ -1782,12 +1797,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(value)
 
 		print("\n\n\nKeyframes Per Bone: ", keysPerBone)
-		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy)
+		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy, arma=arma)
 		if FullDebug:
 			print("Bones in IKchains: ", bonesInIkChains)
 			print("Bones with curves: ", bonesWithCurves)
 
-	def write_file(self, context, keysPerBone, pieceHierarchy):
+	def write_file(self, context, keysPerBone, pieceHierarchy, arma):
 		fps = 30.0
 		move_turn_minimum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
 		sleepPerFrame = 1.0 / fps
@@ -1861,9 +1876,9 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				cmdLine = cmdLine + ' -- Possible unwanted rotation, keep deltas < 180 degrees (3.1399 rad)'
 			return cmdLine
 
-		def OutputPieceVariables():
+		def OutputPieceVariables(arma):
 			tabs = '\t' * 5
-			arma = context.scene.objects['Armature']
+			# arma = context.scene.objects['Armature']
 			outputText = ''
 			# for bone_name, keys_dic in bones.items():
 			for bone in arma.pose.bones:
@@ -1901,25 +1916,25 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if VARIABLEAMPLITUDE:
 			outFile.write("local animAmplitude = 100 -- Higher values are bigger, 100 is default\n")
 		# TODO
-# 		if ISWALK and VARIABLESPEED:
-# 			outFile.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
-# 			outFile.write("local SIG_WALK = 1\n")
-# 			outFile.write("""
-# local walking = false -- prevent script.StartMoving from spamming threads if already walking
-#
-# local function GetSpeedParams()
-# \tlocal attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
-# \tif attMod <= 0 then
-# \t\treturn 0, 300
-# \tend
-# \tlocal sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
-# \tif sleepFrames < 1 then
-# \t\tsleepFrames = 1
-# \tend
-# \tlocal speedMod = 1 / sleepFrames
-# \treturn speedMod, 33*sleepFrames
-# end
-# """)
+		# 		if ISWALK and VARIABLESPEED:
+		# 			outFile.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
+		# 			outFile.write("local SIG_WALK = 1\n")
+		# 			outFile.write("""
+		# local walking = false -- prevent script.StartMoving from spamming threads if already walking
+		#
+		# local function GetSpeedParams()
+		# \tlocal attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
+		# \tif attMod <= 0 then
+		# \t\treturn 0, 300
+		# \tend
+		# \tlocal sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
+		# \tif sleepFrames < 1 then
+		# \t\tsleepFrames = 1
+		# \tend
+		# \tlocal speedMod = 1 / sleepFrames
+		# \treturn speedMod, 33*sleepFrames
+		# end
+		# """)
 		elif ISWALK:
 			outFile.write("local walking")
 		elif not ISDEATH:
@@ -1941,40 +1956,40 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		stopwalking_maxspeed = {}  # dict of commands, with max velocity in it to define the stopwalking function
 		firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
-# 		if ISWALK:
-# 			outFile.write("""
-# local function Walk()
-# \tSignal(SIG_WALK)
-# \tSetSignalMask(SIG_WALK)
-# \tlocal speedMult, sleepTime = GetSpeedParams()
-# """)
-# 		elif ISDEATH:
-# 			# TODO for death animations:
-# 			# turn values and speeds probably need to be converted to radians
-# 			outFile.write("""
-# -- use StartThread(DeathAnim) from Killed()
-# local function DeathAnim() -- %s
-# \tSignal(SIG_WALK)
-# \tSignal(SIG_AIM)
-# \tStartThread(StopWalking()
-# \tTurn(aimy1, y_axis, 0, %d)
-# \tTurn(aimx1, x_axis, 0, %d)
-# """ % (INFOSTRING, radians(120), radians(120)))
-# 		# Not-walk scripts
-# 		else:
-# 			outFile.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
-# 			outFile.write("""
-# local function Animate() -- %s
-# """ % INFOSTRING)
-# 		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
-# 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
-#
-# 		lastFrame = keyframe_times[-1]
-# 		outFile.write("\tlocal FEF = "+str(lastFrame)+"\n")
-#
-# 		firstStep = True
-# 		if not ISWALK:
-# 			firstStep = False
+		# 		if ISWALK:
+		# 			outFile.write("""
+		# local function Walk()
+		# \tSignal(SIG_WALK)
+		# \tSetSignalMask(SIG_WALK)
+		# \tlocal speedMult, sleepTime = GetSpeedParams()
+		# """)
+		# 		elif ISDEATH:
+		# 			# TODO for death animations:
+		# 			# turn values and speeds probably need to be converted to radians
+		# 			outFile.write("""
+		# -- use StartThread(DeathAnim) from Killed()
+		# local function DeathAnim() -- %s
+		# \tSignal(SIG_WALK)
+		# \tSignal(SIG_AIM)
+		# \tStartThread(StopWalking()
+		# \tTurn(aimy1, y_axis, 0, %d)
+		# \tTurn(aimx1, x_axis, 0, %d)
+		# """ % (INFOSTRING, radians(120), radians(120)))
+		# 		# Not-walk scripts
+		# 		else:
+		# 			outFile.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
+		# 			outFile.write("""
+		# local function Animate() -- %s
+		# """ % INFOSTRING)
+		# 		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+		# 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
+		#
+		# 		lastFrame = keyframe_times[-1]
+		# 		outFile.write("\tlocal FEF = "+str(lastFrame)+"\n")
+		#
+		# 		firstStep = True
+		# 		if not ISWALK:
+		# 			firstStep = False
 
 		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
 
@@ -1988,6 +2003,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Minor hack so we always have at least one range
 			markers.append(SCENELASTFRAME)                      # also to add the last scene frame as a marker
+			markerNames[SCENELASTFRAME] = "anim"
 		print("\n\n\n\nMarkers' frames:\n")
 		print(markers)
 
@@ -1995,7 +2011,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		RANGELASTFRAME = SCENELASTFRAME
 
 		# Creates the piece variables, eg: local left_arm1 = piece 'left_arm1'
-		outFile.write(OutputPieceVariables())
+		outFile.write(OutputPieceVariables(arma))
 
 		animID = 0		# anim1, anim2, etc
 
