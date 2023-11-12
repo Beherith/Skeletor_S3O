@@ -1650,12 +1650,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						keysPerBone[bone_name][frame_time][axisId] = keyframeData.copy()
 
 		print("\n\n\n\n\n\n### Visibility keys\n")
-		#### Goes through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
-		#### its meshFromBone.animation_data, search *only* for "hide_viewport" channels
-		#### Assign that info to keysPerBone
 
 		SKINNING = context.scene.my_tool.skinning
 
+		#### Goes through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
+		#### its meshFromBone.animation_data, search *only* for "hide_viewport" channels
+		#### Assign that info to keysPerBone; <<== Not usable for Skinned animations! ==>
 		if not SKINNING:
 			for bone_name in keysPerBone:
 				meshFromBone = context.scene.objects[bone_name]  # same name as the bone
@@ -1883,9 +1883,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			# for bone_name, keys_dic in bones.items():
 			for bone in arma.pose.bones:
 				bone_name = bone.name
+				piece_name = bone_name
 				if 'iktarget' in bone_name:
 					continue
-				outputText += "local "+bone_name+" = piece '"+bone_name+"'\n"
+				if context.scene.my_tool.skinning:	# SKINNING UI option is enabled
+					piece_name = arma.name + "_" + piece_name  # Something like "Armature_root", for "root" bone
+				outputText += "local "+bone_name+" = piece '"+piece_name+"'\n"
 			outputText += '\nVFS.Include("scripts/include/springtweener.lua")\n\n'
 			firstLine = True
 			for bone in arma.pose.bones:
