@@ -589,6 +589,8 @@ class SkeletorOperator(bpy.types.Operator):
 			if piece.parent is not None and not piece.isAimXY:
 				print("piece " + name + " | parent: " + piece.parent.name)
 				piece.bone.parent = piece.parent.bone
+				if ASSIMP and len(piece.parent.children) == 1:
+					piece.parent.bone.tail = piece.bone.head
 
 		bpy.ops.object.editmode_toggle()  # These are required so that 'armature_object.pose.bones[piece.bonename]' works
 		bpy.ops.object.posemode_toggle()
