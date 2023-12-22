@@ -737,9 +737,19 @@ class SkeletorBOSMaker(bpy.types.Operator):
 	def tobos(self, context):
 		print("MAKING BOS, BOSS")
 		scene = context.scene
+		arm = None
 		if 'Armature' not in context.scene.objects:
-			return
-		arm = context.scene.objects['Armature']
+			print("Default Armature not in context.scene.objects. Objects Found:")
+			for o in context.scene.objects:
+				print(o, o.type)
+				if o.type == "ARMATURE":
+					print("Found an armature", o, o.type)
+					arm = o
+			if arm is None:
+				print("No armature object found in context.scene.objects")
+				return
+		else:
+			arm = context.scene.objects['Armature']
 		print("whichframe", self.whichframe)
 		self.whichframe += 1
 		props = {"location": "move", "rotation_euler": "turn"}
