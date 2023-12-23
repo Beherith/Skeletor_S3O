@@ -51,6 +51,8 @@ FullDebug = False
 
 
 import logging
+import time
+from pathlib import Path
 
 # Create a logger instance
 logger = logging.getLogger('skeletor_logger')
@@ -60,7 +62,7 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(levelname)s: %(message)s')
 
 # Create a file handler to write logs to a file
-file_handler = logging.FileHandler('skeletorscript_log.txt', mode = 'a')
+file_handler = logging.FileHandler(f'{Path.home()}/skeletorscript_log_{time.strftime("%Y%m%d-%H%M%S")}.txt')
 file_handler.setFormatter(formatter)
 
 # Create a stream handler to write logs to the standard output (console)
