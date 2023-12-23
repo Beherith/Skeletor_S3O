@@ -611,8 +611,6 @@ class SkeletorOperator(bpy.types.Operator):
 			if piece.parent is not None and not piece.isAimXY:
 				logger.info("piece " + name + " | parent: " + piece.parent.name)
 				piece.bone.parent = piece.parent.bone
-				if ASSIMP and len(piece.parent.children) == 1:
-					piece.parent.bone.tail = piece.bone.head
 
 		bpy.ops.object.editmode_toggle()  # These are required so that 'armature_object.pose.bones[piece.bonename]' works
 		bpy.ops.object.posemode_toggle()
@@ -762,12 +760,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		logger.info("MAKING BOS, BOSS")
 		scene = context.scene
 		arm = None
+		piecenameprefix = ""
 		if 'Armature' not in context.scene.objects:
 			logger.warning("Default Armature not in context.scene.objects. Objects Found:")
 			for o in context.scene.objects:
 				logger.info(f'{o} {o.type}')
 				if o.type == "ARMATURE":
 					logger.info(f'Found an armature{ o} {o.type}')
+					piecenameprefix = o.name + '_'
 					arm = o
 			if arm is None:
 				logger.error("No possible armature type object found, exiting")
@@ -949,11 +949,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			logger.info(f'	{k}')
 			for k2 in sorted(list(animframes[k])):
 				logger.info(f'		{k2} {animframes[k][k2]}')
-		self.write_file(context=context, animframes=animframes, piecehierarchy=piecehierarchy)
+		self.write_file(context=context, animframes=animframes, piecehierarchy=piecehierarchy, piecenameprefix = piecenameprefix)
 		logger.info(f'bonesinIKchains: {bonesinIKchains}')
 		logger.info(f'boneswithcurves: {boneswithcurves}')
 
-	def write_file(self, context, animframes, piecehierarchy):
+	def write_file(self, context, animframes, piecehierarchy, piecenameprefix = ""):
 		fps = 30.0
 		move_turn_miniumum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
 		sleepperframe = 1.0 / fps
@@ -975,6 +975,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		FIRSTFRAMESTANCE = context.scene.my_tool.firstframestance
 		VARIABLESCALE = context.scene.my_tool.varscale
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
+		ASSIMP = context.scene.my_tool.assimp_workflow
 
 		move_variable = '[%.6f]'
 		turn_variable = '<%.6f>'
@@ -987,8 +988,18 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
 		#AXES = 'XZY'
-		BOSAXIS = ['x-axis', 'z-axis', 'y-axis']
+		BOSAXIS = ['x-axis', 'z-axis' if not ASSIMP else 'y-axis', 'y-axis' if not ASSIMP else 'z-axis']
 		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, -1.0, 1.0]}
+		if ASSIMP:
+			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, -1.0, 1.0]} # wonky
+			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]} # ok Y axis is surely correct now
+			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0, 1.0]} # ok Y axis is surely correct now, X looks ok too...
+			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0, -1.0]} # ok Y axis is surely correct now, X looks ok too, Z too, but surely there isnt a swap here?
+		
+
+		#LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
+		#blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
+
 
 		def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
 							  delta=0):
@@ -996,7 +1007,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex],
 			cmdline = '' + '\t' * indents
 			cmdline = cmdline + turn_or_move + ' '
-			cmdline = cmdline + bonename + ' to '
+			cmdline = cmdline + piecenameprefix + bonename + ' to '
 			cmdline = cmdline + axisname + ' '
 			if turn_or_move == 'turn':
 				cmdline = cmdline + turn_variable % targetposition + ' '
@@ -1149,7 +1160,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						else:
 							stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
 						rotations_sum += abs(value - prevvalue)
-
+						if bone_name[0:3] == 'PC_':
+							logger.info(f'Skipping fake bone PC_ {bone_name}')
+							continue
 						BOS = MakeBOSLineString(
 							turn_or_move,
 							bone_name,
