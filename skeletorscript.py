@@ -894,6 +894,12 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 		if FullDebug:
 			logger.debug("Gathering animdata")
+		
+		logger.info("Preprocessed Animframes: ")
+		for k in sorted(list(animframes.keys())):
+			logger.info(f'	{k}')
+			for k2 in sorted(list(animframes[k])):
+				logger.info(f'		{k2} {animframes[k][k2]}')
 
 		for frame_time in sorted(animframes.keys()):
 			logger.info(f'SETTING FRAMETIME {frame_time}')
@@ -918,7 +924,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 					current_bone = current_bone.parent
 
 				rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
-				rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
+				rotation_text = 'Bone:%s isIK:%s X:%.1f Y:%.1f Z:%.1f degrees rotations in euler' % (bone_name,bone.name in bonesinIKchains, degrees(rot.x), degrees(rot.y), degrees(rot.z))
 				logger.info(rotation_text)
 
 				if bone.name not in bonesinIKchains:
@@ -938,7 +944,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						logger.info(f'adding {frame_time} {bone_name} rot {axis} {value}')
 						animframes[frame_time][bone_name]['rot' + str(axis)] = degrees(value)
 
-		logger.info("Postprocessed Animframes: ", animframes)
+		logger.info("Postprocessed Animframes: ")
 		for k in sorted(list(animframes.keys())):
 			logger.info(f'	{k}')
 			for k2 in sorted(list(animframes[k])):
@@ -1125,6 +1131,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						turn_or_move = 'turn'
 						if axis.startswith('location'):  # Move
 							turn_or_move = 'move'
+						else:
+							if axis not in ['rot0', 'rot1', 'rot2']:
+								logger.warning(f'Found an axis name {axis} that is nonstandard for bos in piece {bone_name} at frame {frame_time}')
+								continue
 						stopwalking_cmd = '%s %s to %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
 
 						if FIRSTFRAMESTANCE and frame_index == 0:
