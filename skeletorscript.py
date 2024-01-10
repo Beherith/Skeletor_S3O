@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "Skeletor_S3O SpringRTS (.s3o)",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (0, 4, 1),
+	"version": (0, 4, 2),
 	"blender": (2, 80, 0),
 	"location": "3D View > Side panel",
 	"description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -248,11 +248,16 @@ def getmeshbyname(name):
 
 
 def getS3ORootObject():
+	#bpy.ops.outliner.item_activate(deselect_all=True) # God knows why this might be needed, but blender 3.6+ refuses to work without this 
+	logger.info(f'Searching for S3O root object.')
 	currentCollection = bpy.context.collection
 	bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 	bpy.ops.object.mode_set(mode='OBJECT')
 	#for obj in bpy.data.objects:
 	for obj in currentCollection.all_objects:
+		
+		logger.info(f'{obj} in currentCollection.all_objects: {obj.name} {obj.parent}')
+		logger.info(f'{obj} in currentCollection.all_objects: {obj.name}')
 		if 'SpringRadius' in obj.name or 'SpringHeight' in obj.name:
 			continue
 		if obj.parent is None:
