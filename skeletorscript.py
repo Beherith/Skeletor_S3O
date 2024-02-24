@@ -1040,7 +1040,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		if ISWALK and VARIABLESPEED:
 			outf.write(
 				"// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
-			outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, isMoving;\n#define SIG_WALK 4\n")
+			outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, isMoving;\n#define SIGNAL_MOVE 1\n")
 		elif not ISDEATH:
 			outf.write("static-var bAnimate;\n")
 
@@ -1059,15 +1059,15 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		stopwalking_maxspeed = {}  # dict of bos commands, with max velocity in it to define the stopwalking function
 		firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
 		if ISWALK:
-			outf.write("Walk() {// %s \n\tset-signal-mask SIG_WALK;\n" % INFOSTRING)
+			outf.write("Walk() {// %s \n\tset-signal-mask SIGNAL_MOVE;\n" % INFOSTRING)
 		elif ISDEATH:
 			outf.write(
-				"//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIG_WALK;\n\tsignal SIG_AIM;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
+				"//use call-script DeathAnim(); from Killed()\nDeathAnim() {// %s \n\tsignal SIGNAL_MOVE;\n\tsignal SIGNAL_AIM1;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n" % (
 					INFOSTRING))
 		else:
 			outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
 			outf.write(
-				"Animate() {// %s \n\tset-signal-mask SIG_WALK | SIG_AIM; //you might need this\n\tsleep 100*RAND(30,256);//sleep between 3 and 25.6 seconds\n\tbAnimate = TRUE;\n" % (
+				"Animate() {// %s \n\tset-signal-mask SIGNAL_MOVE | SIGNAL_AIM1; //you might need this\n\tsleep 100*RAND(30,256);//sleep between 3 and 25.6 seconds\n\tbAnimate = TRUE;\n" % (
 					INFOSTRING))
 
 		firststep = True
@@ -1267,8 +1267,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			outf.write('\t\tif (animspeed>%i) animSpeed = %i;\n' % (animFPK * 2, animFPK * 2))
 			outf.write('\t\tsleep %i;\n' % (33 * animFPK - 1))
 			outf.write('\t}\n}\n')
-			outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tisMoving=TRUE;\n\tstart-script Walk();\n}\n')
-			outf.write('StopMoving(){\n\tsignal SIG_WALK;\n\tisMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
+			outf.write('StartMoving(){\n\tsignal SIGNAL_MOVE;\n\tisMoving=TRUE;\n\tstart-script Walk();\n}\n')
+			outf.write('StopMoving(){\n\tsignal SIGNAL_MOVE;\n\tisMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
 
 		outf.close()
 		logger.info(f'Done writing bos! ISWALK = {ISWALK} Varspeed = {VARIABLESPEED}')
@@ -1349,7 +1349,7 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 			outf.write("local animAmplitude = 100 -- Higher values are bigger, 100 is default\n")
 		if ISWALK and VARIABLESPEED:
 			outf.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
-			outf.write("local SIG_WALK = 1\n")
+			outf.write("local SIGNAL_MOVE = 1\n")
 			outf.write("""
 local walking = false -- prevent script.StartMoving from spamming threads if already walking
 
@@ -1388,8 +1388,8 @@ end
 		if ISWALK:
 			outf.write("""
 local function Walk()
-\tSignal(SIG_WALK)
-\tSetSignalMask(SIG_WALK)
+\tSignal(SIGNAL_MOVE)
+\tSetSignalMask(SIGNAL_MOVE)
 \tlocal speedMult, sleepTime = GetSpeedParams()
 """)
 		elif ISDEATH:
@@ -1398,8 +1398,8 @@ local function Walk()
 			outf.write("""
 -- use StartThread(DeathAnim) from Killed()
 local function DeathAnim() -- %s
-\tSignal(SIG_WALK)
-\tSignal(SIG_AIM)
+\tSignal(SIGNAL_MOVE)
+\tSignal(SIGNAL_AIM1)
 \tStartThread(StopWalking()
 \tTurn(aimy1, y_axis, 0, %d)
 \tTurn(aimx1, x_axis, 0, %d)
@@ -1410,7 +1410,7 @@ local function DeathAnim() -- %s
 			outf.write("""
 local function Animate() -- %s
 """ % INFOSTRING)
-		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+		# \tSetSignalMask(SIGNAL_MOVE + SIGNAL_AIM1) -- you might need this
 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 
 		firststep = True
@@ -1556,8 +1556,8 @@ local function Animate() -- %s
 			if ISWALK:
 				outf.write('\n')
 				outf.write("""local function StopWalking()
-\tSignal(SIG_WALK)
-\tSetSignalMask(SIG_WALK)
+\tSignal(SIGNAL_MOVE)
+\tSetSignalMask(SIGNAL_MOVE)
 
 """)
 				if VARIABLESPEED:
@@ -1984,7 +1984,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# TODO
 		# 		if ISWALK and VARIABLESPEED:
 		# 			outFile.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
-		# 			outFile.write("local SIG_WALK = 1\n")
+		# 			outFile.write("local SIGNAL_MOVE = 1\n")
 		# 			outFile.write("""
 		# local walking = false -- prevent script.StartMoving from spamming threads if already walking
 		#
@@ -2025,8 +2025,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# 		if ISWALK:
 		# 			outFile.write("""
 		# local function Walk()
-		# \tSignal(SIG_WALK)
-		# \tSetSignalMask(SIG_WALK)
+		# \tSignal(SIGNAL_MOVE)
+		# \tSetSignalMask(SIGNAL_MOVE)
 		# \tlocal speedMult, sleepTime = GetSpeedParams()
 		# """)
 		# 		elif ISDEATH:
@@ -2035,8 +2035,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# 			outFile.write("""
 		# -- use StartThread(DeathAnim) from Killed()
 		# local function DeathAnim() -- %s
-		# \tSignal(SIG_WALK)
-		# \tSignal(SIG_AIM)
+		# \tSignal(SIGNAL_MOVE)
+		# \tSignal(SIGNAL_AIM1)
 		# \tStartThread(StopWalking()
 		# \tTurn(aimy1, y_axis, 0, %d)
 		# \tTurn(aimx1, x_axis, 0, %d)
@@ -2047,7 +2047,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		# 			outFile.write("""
 		# local function Animate() -- %s
 		# """ % INFOSTRING)
-		# 		# \tSetSignalMask(SIG_WALK + SIG_AIM) -- you might need this
+		# 		# \tSetSignalMask(SIGNAL_MOVE + SIGNAL_AIM1) -- you might need this
 		# 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
 		#
 		# 		lastFrame = keyframe_times[-1]
@@ -2417,8 +2417,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			if ISWALK:
 				outFile.write('\n')
 				outFile.write("""local function StopWalking()
-\tSignal(SIG_WALK)
-\tSetSignalMask(SIG_WALK)
+\tSignal(SIGNAL_MOVE)
+\tSetSignalMask(SIGNAL_MOVE)
 
 """)
 				if VARIABLESPEED:
