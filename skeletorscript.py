@@ -1213,9 +1213,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		if not ISDEATH:
 			if ISWALK:
 				outf.write(
-					'// Call this from MotionControl()!\nStopWalking() {\n\tanimSpeed = 10; // tune restore speed here, higher values are slower restore speeds\n')
+					'// Call this from StopMoving()!\nStopWalking() {\n\tanimSpeed = 10; // tune restore speed here, higher values are slower restore speeds\n')
 			else:
-				outf.write('// Call this from MotionControl()!\nStopAnimation() {\n')
+				outf.write('// Call this from StopMoving()!\nStopAnimation() {\n')
 			for restore in sorted(stopwalking_maxspeed.keys()):
 				if FIRSTFRAMESTANCE:
 					stance_position = 0
@@ -1564,7 +1564,7 @@ local function Animate() -- %s
 					outf.write('\tlocal speedMult = 0.5 * GetSpeedParams() -- slower restore speed for last step\n\n')
 			else:
 				if VARIABLESPEED:
-					outf.write('-- Call this from MotionControl()!\n')
+					outf.write('-- Call this from StopMoving()!\n')
 				outf.write('local function StopAnimation()\n')
 			for restore in sorted(stopwalking_maxspeed.keys()):
 				if FIRSTFRAMESTANCE:
@@ -2425,7 +2425,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					outFile.write('\tlocal speedMult = 0.5 * GetSpeedParams() -- slower restore speed for last step\n\n')
 			else:
 				if VARIABLESPEED:
-					outFile.write('-- Call this from MotionControl()!\n')
+					outFile.write('-- Call this from StopMoving()!\n')
 				# outFile.write('local function StopAnimation()\n')		# Temporarily disabled
 			for restore in sorted(stopwalking_maxspeed.keys()):
 				if FIRSTFRAMESTANCE:
