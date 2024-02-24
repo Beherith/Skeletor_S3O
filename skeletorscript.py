@@ -1040,7 +1040,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		if ISWALK and VARIABLESPEED:
 			outf.write(
 				"// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
-			outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, bMoving;\n#define SIG_WALK 4\n")
+			outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, isMoving;\n#define SIG_WALK 4\n")
 		elif not ISDEATH:
 			outf.write("static-var bAnimate;\n")
 
@@ -1086,10 +1086,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 			if frame_index > 0:
 				if firststep:
-					outf.write("\tif (bMoving) { //Frame:%i\n" % frame_time)
+					outf.write("\tif (isMoving) { //Frame:%i\n" % frame_time)
 				else:
 					if ISWALK:
-						outf.write("\t\tif (bMoving) { //Frame:%i\n" % frame_time)
+						outf.write("\t\tif (isMoving) { //Frame:%i\n" % frame_time)
 					elif ISDEATH:
 						outf.write("\t\tif (TRUE) { //Frame:%i\n" % frame_time)
 					else:
@@ -1200,7 +1200,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 				if firststep:
 					outf.write("\t}\n")
-					outf.write("\twhile(bMoving) {\n")
+					outf.write("\twhile(isMoving) {\n")
 					firststep = False
 				else:
 					outf.write('\t\t}\n')
@@ -1267,8 +1267,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			outf.write('\t\tif (animspeed>%i) animSpeed = %i;\n' % (animFPK * 2, animFPK * 2))
 			outf.write('\t\tsleep %i;\n' % (33 * animFPK - 1))
 			outf.write('\t}\n}\n')
-			outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tbMoving=TRUE;\n\tstart-script Walk();\n}\n')
-			outf.write('StopMoving(){\n\tsignal SIG_WALK;\n\tbMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
+			outf.write('StartMoving(){\n\tsignal SIG_WALK;\n\tisMoving=TRUE;\n\tstart-script Walk();\n}\n')
+			outf.write('StopMoving(){\n\tsignal SIG_WALK;\n\tisMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
 
 		outf.close()
 		logger.info(f'Done writing bos! ISWALK = {ISWALK} Varspeed = {VARIABLESPEED}')
