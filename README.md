@@ -29,5 +29,19 @@ https://www.youtube.com/watch?v=gH5uATTTYB4
 
 8. Enjoy!
 
+## Recoil GLTF/GLB workflow
+
+For a model imported through the S3O Blender workflow, export GLB with Blender's
+`+Y up` option disabled and add the Scene custom property `s3ocompat=true`.
+SuperSkeletor exports the same `YXZ` BOS/LUS axes for S3O and GLTF models because
+current RecoilEngine versions convert GLTF piece data into engine coordinates
+while loading. Compile the generated BOS normally: do not add `#define GLTF` or
+use BARScriptCompiler's deprecated GLTF axis-remapping flags.
+
+Enable **glTF Workflow** before exporting scripts to validate these settings. It
+also warns when an animated object or bone has a non-identity local rest rotation;
+that rest frame is intentionally preserved by Recoil and rotates the affected
+piece's local animation axes.
+
 
 ![example](cormort.gif)
