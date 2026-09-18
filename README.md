@@ -6,7 +6,7 @@ Video Tutorial:
 https://www.youtube.com/watch?v=DaMLNfOR6KU
 
 # Skeletor_S3O
-A blender script that automatically generates a skeleton for an s3o imported model for SpringRTS animation
+A blender script that automatically generates a skeleton for an s3o imported model for SpringRTS and Recoil Engine animation
 
 Usage:
 
@@ -20,11 +20,22 @@ Usage:
 
 5. You can now go into Pose mode and flail the appendages around. 
 
-6. If you keep enabled "Add IK targets to chains", the addon will setup up inverse kinematics automagically for you, so you can rotate chains from a controller at its tip. If that fails for some reason, I recommend watching this video, in 5 minutes it will explain things better than I ever could:
+        ATTENTION: Spring/Recoil engine doesn't properly support rotations greater than 130 degrees, which might lead to undesired
+        "flips" during animation playback. When that's required and to avoid some gimbal lock issues, you might need to add
+        intermediary empty object parts, with the same pivot, and apply smaller rotations to each part (Eg: 90 degrees to the
+        parent and child, instead of 180 degrees to a single bone).
+
+7. If you keep enabled "Add IK targets to chains", the addon will setup up inverse kinematics automagically for you, so you can rotate chains from a controller at its tip. If that fails for some reason, I recommend watching this video, in 5 minutes it will explain things better than letters ever could:
 
 https://www.youtube.com/watch?v=gH5uATTTYB4
 
-7. Export to BOS, LUS (Lua Unit Script) or [LUS Tween format](https://github.com/FluidPlay/TAP/blob/main/scripts/include/springtweener.lua) by clicking the bottom buttons. The script will be created right next to where the current blender file is saved.
+7. If you select the "Assimp Workflow" button before creating the skeleton, bones will point to their children, effectively aligning them to the source meshes local rotation. Additionally, activate "Export for Skinning" to use third-party generated skeletons, usually from other industry-standard DCC animation packages, on export.
+
+8. The "Export for DAE (vs s3o)" option will export the coordinates system according to the DAE file format. 
+
+        IMPORTANT: With that option, have the models point towards the Negative Y direction, instead of Positive Y.
+
+8. Export to BOS, LUS (Lua Unit Script) or [LUS Tween format](https://github.com/FluidPlay/TAP/blob/main/scripts/include/springtweener.lua) by clicking the bottom buttons. The script will be created right next to where the current blender file is saved.
    - For videos showcasing the entire production workflow from a blender model, to animating it, exporting and integrating it in SpringRTS (with the SpringTweener library), check the three videos which start here: https://www.youtube.com/watch?v=W1U3WAbjXss
 
 8. Enjoy!

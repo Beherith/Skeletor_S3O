@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "Skeletor_S3O SpringRTS (.s3o)",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (0, 4, 2),
+	"version": (0, 4, 3),
 	"blender": (2, 80, 0),
 	"location": "3D View > Side panel",
 	"description": "Create a Skeleton and a BOS for a SpringRTS",
@@ -57,7 +57,7 @@ from pathlib import Path
 # Create a logger instance
 logger = logging.getLogger('skeletor_logger')
 logger.setLevel(logging.DEBUG)
- 
+
 # Create a formatter to define the log message format
 formatter = logging.Formatter('%(levelname)s: %(message)s')
 
@@ -127,6 +127,11 @@ class MySettings(PropertyGroup):
 		description="Don't require bones to be created by Skeletor, useful for skinning export. Use it with the Assimp workflow option",
 		default=False
 	)
+	dae_orientation: BoolProperty(
+		name="DAE orientation",
+		description="Switches the sign of Y rotations. Use it with the Assimp workflow option",
+		default=False
+	)
 
 
 class Skelepanel(bpy.types.Panel):
@@ -157,6 +162,7 @@ class Skelepanel(bpy.types.Panel):
 		layout.prop(mytool, "is_death", text="Is Death Script")
 		layout.prop(mytool, "assimp_workflow", text="Assimp Workflow")
 		layout.prop(mytool, "skinning", text="Export for Skinning")
+		layout.prop(mytool, "dae_orientation", text="Export for DAE (vs s3o)")
 		row = layout.row()
 		row.operator('skele.skeletorbosmaker', text='2. Create BOS')
 		row = layout.row()
@@ -248,14 +254,14 @@ def getmeshbyname(name):
 
 
 def getS3ORootObject():
-	#bpy.ops.outliner.item_activate(deselect_all=True) # God knows why this might be needed, but blender 3.6+ refuses to work without this 
+	#bpy.ops.outliner.item_activate(deselect_all=True) # God knows why this might be needed, but blender 3.6+ refuses to work without this
 	logger.info(f'Searching for S3O root object.')
 	currentCollection = bpy.context.collection
 	bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 	bpy.ops.object.mode_set(mode='OBJECT')
 	#for obj in bpy.data.objects:
 	for obj in currentCollection.all_objects:
-		
+
 		logger.info(f'{obj} in currentCollection.all_objects: {obj.name} {obj.parent}')
 		logger.info(f'{obj} in currentCollection.all_objects: {obj.name}')
 		if 'SpringRadius' in obj.name or 'SpringHeight' in obj.name:
@@ -481,21 +487,24 @@ class SkeletorOperator(bpy.types.Operator):
 
 		bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 		bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-		#bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 
 		logger.info("\n\n====Looking for mirrorable pieces===")
 		# to enable : https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
 		# rootpiece.recurseleftrightbones()
+
 		for name, piece in pieces.items():
 			piece.bonename = name
 			for name2, piece2 in pieces.items():
 				if name == name2:
 					continue
-				if name.lower().replace('l', '').replace('r', '') == name2.lower().replace('l', '').replace('r', ''):
-					if piece.worldpos[0] > 0:
-						piece.bonename = piece.bonename + '.R'
-					else:
-						piece.bonename = piece.bonename + '.L'
+		###########################################################################################
+		### Auto-mirroring of piece names was causing issues with assimp workflow, removed for now
+		###########################################################################################
+		# 		if name.lower().replace('l', '').replace('r', '') == name2.lower().replace('l', '').replace('r', ''):
+		# 			if piece.worldpos[0] > 0:
+		# 				piece.bonename = piece.bonename + '.R'
+		# 			else:
+		# 				piece.bonename = piece.bonename + '.L'
 
 		logger.info("\n\n====Adding Bones=====")
 		for name in dfs_piece_order:
@@ -616,13 +625,17 @@ class SkeletorOperator(bpy.types.Operator):
 			if piece.parent is not None and not piece.isAimXY:
 				logger.info("piece " + name + " | parent: " + piece.parent.name)
 				piece.bone.parent = piece.parent.bone
+				if ASSIMP and len(piece.parent.children) == 1:
+					piece.parent.bone.tail = piece.bone.head
+					# Zero-length bones are rapidly "deleted" by Blender, so we prevent that (and resulting errors)
+					if piece.parent.bone.length == 0:
+						piece.parent.bone.tail = piece.parent.bone.head + Vector((0,5,0))
 
 		bpy.ops.object.editmode_toggle()  # These are required so that 'armature_object.pose.bones[piece.bonename]' works
 		bpy.ops.object.posemode_toggle()
 
-		logger.info("=====Setting IK Targets=======")
-
 		if AUTOADDIK:
+			logger.info("=====Setting IK Targets=======")
 			for name, piece in pieces.items():
 				if not piece.isAimXY:
 					armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE  # ROTATION_MODE = 'YXZ'  # was: 'ZXY'
@@ -899,7 +912,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 		if FullDebug:
 			logger.debug("Gathering animdata")
-		
+
 		logger.info("Preprocessed Animframes: ")
 		for k in sorted(list(animframes.keys())):
 			logger.info(f'	{k}')
@@ -981,6 +994,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		VARIABLESCALE = context.scene.my_tool.varscale
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
 		ASSIMP = context.scene.my_tool.assimp_workflow
+		DAE = context.scene.my_tool.dae_orientation
 
 		move_variable = '[%.6f]'
 		turn_variable = '<%.6f>'
@@ -993,23 +1007,27 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
 		#AXES = 'XZY'
-		BOSAXIS = ['x-axis', 'z-axis' if not ASSIMP else 'y-axis', 'y-axis' if not ASSIMP else 'z-axis']
-		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, -1.0, 1.0]}
-		if ASSIMP:
-			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, -1.0, 1.0]} # wonky
-			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]} # ok Y axis is surely correct now
-			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0, 1.0]} # ok Y axis is surely correct now, X looks ok too...
-			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0, -1.0]} # ok Y axis is surely correct now, X looks ok too, Z too, but surely there isnt a swap here?
-		
+		BOSAXIS = ['x-axis', ('z-axis' if not ASSIMP else 'y-axis'), ('y-axis' if not ASSIMP else 'z-axis')]
+		axis_multiplier = 	{'move': [1.0, 1.0, 1.0], 'turn': [-1.0, -1.0, 1.0]} if not DAE \
+							else \
+							{'move': [-1.0, -1.0, 1.0], 'turn': [-1.0, 1.0, 1.0]}
 
-		#LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
-		#blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
+#		if ASSIMP:
+#			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, -1.0, 1.0]}  # wonky
+#			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0],
+#											  'turn': [-1.0, 1.0, 1.0]}  # ok Y axis is surely correct now
+#			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0,
+#																				1.0]}  # ok Y axis is surely correct now, X looks ok too...
+#			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0,
+#																				-1.0]}  # ok Y axis is surely correct now, X looks ok too, Z too, but surely there isnt a swap here?
 
+		# LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
+		# blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
 
 		def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
 							  delta=0):
 			axisname = BOSAXIS[axisindex]
-			targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex],
+			targetposition = targetposition * axis_multiplier[turn_or_move][axisindex],
 			cmdline = '' + '\t' * indents
 			cmdline = cmdline + turn_or_move + ' '
 			cmdline = cmdline + piecenameprefix + bonename + ' to '
@@ -1155,8 +1173,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 						if FIRSTFRAMESTANCE and frame_index == 0:
 							firstframestance_positions[stopwalking_cmd] = value * \
-																		  blender_to_bos_axis_multiplier[turn_or_move][
-																			  axis_index]
+																		axis_multiplier[turn_or_move][axis_index]
 
 						maxvelocity = abs(value - prevvalue) / sleeptime
 						if stopwalking_cmd in stopwalking_maxspeed:
@@ -1303,6 +1320,7 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 		VARIABLESCALE = context.scene.my_tool.varscale
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
 		ASSIMP = context.scene.my_tool.assimp_workflow
+		DAE = context.scene.my_tool.dae_orientation
 
 		move_variable = '%.6f'
 		turn_variable = '%.6f'
@@ -1314,13 +1332,16 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 			move_variable = "((" + move_variable + " *animAmplitude)/100)"
 			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
 
-		LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
-		blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
-
+		LUSAXIS = [	'x_axis', \
+					'z_axis' if not ASSIMP else 'y_axis', \
+					'y_axis' if not ASSIMP else 'z_axis']
+		axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]} if not DAE \
+							else \
+							{'Move': [-1.0, -1.0, 1.0], 'Turn': [-1.0, -1.0, 1.0]}	# Test/WIP
 		def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
 							  delta=0):
 			axisname = LUSAXIS[axisindex]
-			targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex]
+			targetposition = targetposition * axis_multiplier[turn_or_move][axisindex]
 			cmdline = '' + '\t' * indents
 			cmdline = cmdline + turn_or_move + '('
 			cmdline = cmdline + bonename + ', '
@@ -1498,7 +1519,7 @@ local function Animate() -- %s
 
 						if FIRSTFRAMESTANCE and frame_index == 0:
 							firstframestance_positions[stopwalking_cmd] = value * \
-																		  blender_to_bos_axis_multiplier[turn_or_move][
+																		  axis_multiplier[turn_or_move][
 																			  axis_index]
 
 						maxvelocity = abs(value - prevvalue) / sleeptime
@@ -1891,6 +1912,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		VARIABLEAMPLITUDE = context.scene.my_tool.varamplitude
 		SCENEFIRSTFRAME = context.scene.frame_start
 		SCENELASTFRAME = context.scene.frame_end
+		DAE = context.scene.my_tool.dae_orientation
 
 		move_variable = '%.6f'
 		turn_variable = '%.6f'
@@ -1905,10 +1927,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		# LUSAXIS = ['x_axis', 'z_axis', 'y_axis']
 		LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
-		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0]}
+		### MaDD: That's the most important one.
+		axis_multiplier = {'move': [-1.0, -1.0, 1.0] if DAE else ([-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0]),	\
+							'turn': [-1.0, -1.0, 1.0] if DAE else ([-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0])}
 
-		def MakeLusTweenLineString(cmdID, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7,
-		                           delta=0, luaIdx=0):
+		def MakeLusTweenLineString(cmdID, boneName, axisIndex, targetValue, firstFrame, lastFrame, variableSpeed=True, indents=7, \
+								   delta=0, luaIdx=0):
 			cmdLine = '' + '\t' * indents
 			if cmdID == "hide_viewport":
 				if targetValue == 1:
@@ -1918,7 +1942,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				cmdLine = cmdLine + "firstFrame=" + str(firstFrame) + ",},"
 				return cmdLine
 			axisName = LUSAXIS[axisIndex]
-			targetValue = targetValue * blender_to_bos_axis_multiplier[cmdID][axisIndex]
+			targetValue = targetValue * axis_multiplier[cmdID][axisIndex]
 			cmdLine = cmdLine + '[' + str(luaIdx) +']={cmd="' + cmdID + '", '
 			cmdLine = cmdLine + 'axis=' + axisName + ', targetValue='
 			cmdLine = cmdLine + floatFormat % targetValue + ', '
@@ -1964,13 +1988,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 				line = line + bone_name + " = " + bone_name + ",\n"
 				outputText += line
 			outputText += tabs + "rad = math.rad,\n" \
-                    + tabs + "x_axis = x_axis,\n" \
-                    + tabs + "y_axis = y_axis,\n" \
-                    + tabs + "z_axis = z_axis,\n" \
-                    + tabs + "Turn = Turn,\n" \
-                    + tabs + "Move = Move,\n" \
-                    + tabs + "Sleep = Sleep,\n" \
-                    + tabs + "initTween = initTween,\n" \
+					+ tabs + "x_axis = x_axis,\n" \
+					+ tabs + "y_axis = y_axis,\n" \
+					+ tabs + "z_axis = z_axis,\n" \
+					+ tabs + "Turn = Turn,\n" \
+					+ tabs + "Move = Move,\n" \
+					+ tabs + "Sleep = Sleep,\n" \
+					+ tabs + "initTween = initTween,\n" \
 					+ "}\n\n"
 			return outputText
 
@@ -2505,7 +2529,7 @@ def unregister():
 	# To close the logger and remove all handlers
 	for handler in logger.handlers[:]:  # Make a copy of the list to avoid modification during iteration
 		logger.removeHandler(handler)
-	del bpy.types.Scene.my_tool  
+	del bpy.types.Scene.my_tool
 
 
 if __name__ == "__main__":
