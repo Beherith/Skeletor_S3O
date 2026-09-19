@@ -14,9 +14,9 @@
 
 bl_info = {
 	"name": "SuperSkeletor",
-	"author": "Beherith  <mysterme@gmail.com> (Blender 5.1 compatibility and SuperSkeletor batch export by Grok)",
-	"version": (1, 0, 0),
-	"blender": (2, 80, 0),
+	"author": "Beherith  <mysterme@gmail.com>",
+	"version": (1, 1, 0),
+	"blender": (5, 1, 0),
 	"location": "3D View > Side panel (SuperSkeletor)",
 	"description": "Create a Skeleton and batch-export BOS/LUS for SpringRTS / Recoil / Beyond All Reason. Compatible with Blender 2.80 – 5.1+",
 	"warning": "I have no idea what im doing (now with 5.x slotted-actions support)",
@@ -55,9 +55,9 @@ import time
 from pathlib import Path
 
 try:
-	from .bos_animation import render_bos_animation, validate_action_name
+	from .bos_animation import render_bos_animation, sanitize_animation_name
 except ImportError:  # Blender can install/run this add-on as loose source files.
-	from bos_animation import render_bos_animation, validate_action_name
+	from bos_animation import render_bos_animation, sanitize_animation_name
 
 # Create a logger instance
 logger = logging.getLogger('skeletor_logger')
@@ -133,16 +133,8 @@ def get_action_fcurves(arm_or_obj):
 INVALID_ACTION_CHARS = '\\/:*?"<>|'
 
 
-def action_name_is_valid(name):
-	try:
-		validate_action_name(name)
-	except ValueError:
-		return False
-	return True
-
-
 def anim_action_poll(self, action):
-	if action is None or not action_name_is_valid(action.name):
+	if action is None:
 		return False
 	scene = getattr(bpy.context, "scene", None)
 	settings = getattr(scene, "super_skeletor", None) if scene else None
@@ -179,6 +171,7 @@ def sanitize_subfolder(raw):
 
 
 def build_export_filepath(action_name, suffix):
+	action_name = sanitize_animation_name(action_name)
 	filename = "%s_%s%s" % ("untitled", action_name, suffix)
 	blend_path = bpy.data.filepath
 	if blend_path:
@@ -362,6 +355,13 @@ def get_move_scale(context):
 		return 1.0
 
 
+def get_scene_fps(scene):
+	"""Return Blender's effective frame rate, including the FPS base."""
+	fps = float(getattr(scene.render, "fps", 30) or 30)
+	fps_base = float(getattr(scene.render, "fps_base", 1.0) or 1.0)
+	return fps / fps_base
+
+
 def get_anim_flags(operator, context):
 	settings = context.scene.super_skeletor
 	item = getattr(operator, "current_anim_item", None)
@@ -526,7 +526,13 @@ class Skelepanel(bpy.types.Panel):
 		row = export_box.row()
 		row.enabled = can_export
 		row.operator("sskele.createbos", text="Create BOS Includes (.h)")
-		export_box.label(text="BOS includes require 30 FPS and unit-owned animation policy", icon="INFO")
+		fps = get_scene_fps(context.scene)
+		if fps != 30.0:
+			warning = export_box.row()
+			warning.alert = True
+			warning.label(text="BOS export requires a 30 FPS scene", icon="ERROR")
+		else:
+			export_box.label(text="BOS includes use per-animation configuration macros", icon="INFO")
 		row = export_box.row()
 		row.enabled = can_export
 		row.operator("sskele.createlus", text="Create LUS")
@@ -1182,6 +1188,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 	bl_description = "Export selected Anim entries as include-ready [blend]_[action].h files"
 	bl_options = {'REGISTER', 'UNDO'}
 	export_suffix = ".h"
+	bos_include_export = True
 
 	@classmethod
 	def poll(cls, context):
@@ -1189,9 +1196,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 	def execute(self, context):
 		settings = context.scene.super_skeletor
-		fps = float(getattr(context.scene.render, "fps", 30) or 30)
-		if fps != 30.0:
-			self.report({'ERROR'}, "Modular BOS animation export requires a 30 FPS Blender scene")
+		fps = get_scene_fps(context.scene)
+		if self.bos_include_export and fps != 30.0:
+			self.report({'ERROR'}, "BOS animation export requires a 30 FPS Blender scene")
 			return {'CANCELLED'}
 		if settings.gltf_workflow:
 			message = "glTF workflow: export GLB with Blender's +Y Up option disabled"
@@ -1206,14 +1213,11 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		if not items:
 			self.report({'WARNING'}, "No Anim entries with a valid Action")
 			return {'CANCELLED'}
-		invalid_names = sorted({item.action.name for item in items if not action_name_is_valid(item.action.name)})
-		if invalid_names:
-			self.report({'ERROR'}, "Invalid BOS Action name(s): " + ", ".join(invalid_names))
-			return {'CANCELLED'}
-		function_names = ["Start" + item.action.name for item in items]
-		if len(function_names) != len(set(function_names)):
-			self.report({'ERROR'}, "Duplicate generated BOS function name in selected Anim entries")
-			return {'CANCELLED'}
+		if self.bos_include_export:
+			function_names = [sanitize_animation_name(item.action.name) for item in items]
+			if len(function_names) != len({name.casefold() for name in function_names}):
+				self.report({'ERROR'}, "Action names collide after BOS identifier sanitization")
+				return {'CANCELLED'}
 
 		arm, _prefix = find_export_armature(context)
 		if arm is None:
@@ -1237,7 +1241,9 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						logger.warning(message)
 						self.report({'WARNING'}, message)
 						warned_rest_frames.update(rest_frames)
-				self.tobos(context=context)
+				success = self.tobos(context=context)
+				if self.bos_include_export and success is not True:
+					return {'CANCELLED'}
 				exported.append(item.action.name)
 		finally:
 			if arm.animation_data is not None:
@@ -1274,7 +1280,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 					arm = o
 			if arm is None:
 				logger.error("No possible armature type object found, exiting")
-				return
+				return False
 		else:
 			arm = context.scene.objects['Armature']
 		logger.info(f'Starting Frame: {self.whichframe}')
@@ -1345,7 +1351,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 			)
 			logger.error(message)
 			self.report({'ERROR'}, message)
-			return
+			return False
 
 		if sample_frames:
 			logger.info(f'Baking evaluated pose on {len(sample_frames)} keyframe(s)')
@@ -1396,13 +1402,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		logger.info("Baked Animframes: ")
 		for k in sorted(list(animframes.keys())):
 			logger.info(f'	{k} bones={len(animframes[k])}')
-		self.write_file(context=context, animframes=animframes, piecehierarchy=piecehierarchy, piecenameprefix = piecenameprefix)
+		success = self.write_file(context=context, animframes=animframes, piecehierarchy=piecehierarchy, piecenameprefix = piecenameprefix)
 		logger.info(f'bonesinIKchains: {bonesinIKchains}')
+		return success
 
 	def write_file(self, context, animframes, piecehierarchy, piecenameprefix = ""):
-		fps = float(getattr(context.scene.render, "fps", 30) or 30)
+		fps = get_scene_fps(context.scene)
 		flags = get_anim_flags(self, context)
-		action_name = flags["ACTION"].name if flags["ACTION"] else "Action"
+		action_name = sanitize_animation_name(flags["ACTION"].name if flags["ACTION"] else "")
 		try:
 			content = render_bos_animation(
 				animframes,
@@ -1419,16 +1426,17 @@ class SkeletorBOSMaker(bpy.types.Operator):
 				piece_name_prefix=piecenameprefix,
 				piece_hierarchy=piecehierarchy,
 				fps=fps,
+				source_path=bpy.data.filepath,
 			)
 		except ValueError as error:
 			logger.error(str(error))
 			self.report({'ERROR'}, str(error))
-			return
+			return False
 		newfile_name = build_export_filepath(action_name, self.export_suffix)
 		with open(newfile_name, 'w') as outf:
 			outf.write(content)
 		logger.info('Done writing include-ready BOS animation: %s', newfile_name)
-		return
+		return True
 
 		# Legacy inline emitter retained temporarily below for source-history context;
 		# modular exports return above and never emit declarations or unit callbacks.
@@ -1774,6 +1782,7 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 	bl_description = "Export selected Anim entries as [blend]_[action].lua"
 	bl_options = {'REGISTER', 'UNDO'}
 	export_suffix = ".lua"
+	bos_include_export = False
 
 	def write_file(self, context, animframes, piecehierarchy, piecenameprefix=""):
 		fps = float(getattr(context.scene.render, "fps", 30) or 30)
@@ -2146,6 +2155,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 	bl_description = "Export selected Anim entries as [blend]_[action]_tween.lua"
 	bl_options = {'REGISTER', 'UNDO'}
 	export_suffix = "_tween.lua"
+	bos_include_export = False
 
 	def tobos(self, context):
 		logger.info("MAKING LUS TWEEN, LIKE A BOSS!")
@@ -3010,37 +3020,62 @@ end
 		logger.info(f'Done writing LUS! ISWALK = {ISWALK} Varspeed = {VARIABLESPEED}')
 
 
+REGISTER_CLASSES = (
+	SuperSkeleAnimItem,
+	MySettings,
+	SSKELE_OT_anim_add,
+	SSKELE_OT_anim_remove,
+	SkeletorOperator,
+	SkeletorRotator,
+	SkeletorBOSMaker,
+	SkeletorLUSMaker,
+	SkeletorLUSTweenMaker,
+	Skelepanel,
+	SimpleBoneAnglesPanel,
+)
+
+
+def _safe_unregister_class(cls):
+	"""Unregister one class without aborting teardown of a partial reload."""
+	if not getattr(cls, "is_registered", False):
+		return
+	try:
+		bpy.utils.unregister_class(cls)
+	except RuntimeError as error:
+		# Blender can retain a stale module object when a loose add-on file is
+		# replaced while enabled. Continue tearing down every other class so a
+		# single missing bl_rna marker cannot strand the whole add-on.
+		logger.warning("Could not unregister %s: %s", cls.__name__, error)
+
+
 def register():
-	bpy.utils.register_class(SuperSkeleAnimItem)
-	bpy.utils.register_class(MySettings)
-	bpy.types.Scene.super_skeletor = PointerProperty(type=MySettings)
-	bpy.utils.register_class(SSKELE_OT_anim_add)
-	bpy.utils.register_class(SSKELE_OT_anim_remove)
-	bpy.utils.register_class(SkeletorOperator)
-	bpy.utils.register_class(SkeletorRotator)
-	bpy.utils.register_class(SkeletorLUSMaker)
-	bpy.utils.register_class(SkeletorLUSTweenMaker)
-	bpy.utils.register_class(SkeletorBOSMaker)
-	bpy.utils.register_class(Skelepanel)
-	bpy.utils.register_class(SimpleBoneAnglesPanel)
+	registered_now = []
+	try:
+		for cls in REGISTER_CLASSES:
+			if getattr(cls, "is_registered", False):
+				continue
+			bpy.utils.register_class(cls)
+			registered_now.append(cls)
+		if not hasattr(bpy.types.Scene, "super_skeletor"):
+			bpy.types.Scene.super_skeletor = PointerProperty(type=MySettings)
+	except Exception:
+		if hasattr(bpy.types.Scene, "super_skeletor"):
+			del bpy.types.Scene.super_skeletor
+		for cls in reversed(registered_now):
+			_safe_unregister_class(cls)
+		raise
 
 
 def unregister():
-	bpy.utils.unregister_class(Skelepanel)
-	bpy.utils.unregister_class(SimpleBoneAnglesPanel)
-	bpy.utils.unregister_class(SkeletorBOSMaker)
-	bpy.utils.unregister_class(SkeletorLUSTweenMaker)
-	bpy.utils.unregister_class(SkeletorLUSMaker)
-	bpy.utils.unregister_class(SkeletorRotator)
-	bpy.utils.unregister_class(SkeletorOperator)
-	bpy.utils.unregister_class(SSKELE_OT_anim_remove)
-	bpy.utils.unregister_class(SSKELE_OT_anim_add)
-	del bpy.types.Scene.super_skeletor
-	bpy.utils.unregister_class(MySettings)
-	bpy.utils.unregister_class(SuperSkeleAnimItem)
-	# To close the logger and remove all handlers
-	for handler in logger.handlers[:]:  # Make a copy of the list to avoid modification during iteration
-		logger.removeHandler(handler)
+	try:
+		if hasattr(bpy.types.Scene, "super_skeletor"):
+			del bpy.types.Scene.super_skeletor
+		for cls in reversed(REGISTER_CLASSES):
+			_safe_unregister_class(cls)
+	finally:
+		# To close the logger and remove all handlers
+		for handler in logger.handlers[:]:  # Make a copy of the list to avoid modification during iteration
+			logger.removeHandler(handler)
 
 
 if __name__ == "__main__":

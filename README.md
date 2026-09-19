@@ -32,16 +32,22 @@ https://www.youtube.com/watch?v=gH5uATTTYB4
 ## Include-ready BOS animation export
 
 **Create BOS Includes (.h)** writes one header per selected Blender Action. Action
-names must match `[A-Za-z_][A-Za-z0-9_]*`, and the Blender scene must run at 30
-FPS. A generated header defines only `Start<Action>()` and `Stop<Action>()`, so
-several Actions can be included by one unit without duplicate policy or callback
-definitions. The authored animation is the 100% reference at `MAX_SPEED`.
+names are converted to BOS identifiers one character at a time: invalid characters
+become underscores and a leading digit receives an underscore prefix. An empty
+name becomes `Walk`. The same normalized name is used in the output filename.
+The Blender scene must run at 30 FPS.
 
-Variable Speed samples `CURRENT_SPEED` synchronously before every keyframe and
-preserves uneven source intervals. Variable Amplitude scales move and turn
-deviations around the first-frame stance. Variable Scale remains the independent,
-compile-time `MOVESCALE` model calibration. With Variable Amplitude but without
-Variable Speed, the owning unit may set `VA_amplitude` manually.
+Every generated macro, local variable, and function is namespaced with the Action
+name, so several generated headers can be included by one unit. For an Action named
+`Walk`, the public entry points are `Walk()`, `STOP_Walk()`, and, when unit-speed
+modulation is enabled, `Walk_INIT()`.
+
+Walking animations can sample `CURRENT_SPEED` before every keyframe. The generated
+calculation splits speed correction between cadence and absolute transform
+amplitude while carrying fractional milliseconds forward. Idle and death
+animations instead use a fixed-time calculation and never read unit speed; their
+speed remains configurable through `<Action>_DEFAULT_ANIM_TIME`. Stop-animation
+speed is configurable through `<Action>_STOP_SPEED`.
 
 A complete owning-script setup looks like this:
 
@@ -49,42 +55,36 @@ A complete owning-script setup looks like this:
 #include "constants.h"
 
 piece pelvis, thigh;
-static-var VA_frames, VA_sleepTime, VA_amplitude, VA_timeError, VA_useAmplitude;
+static-var isMoving, maxSpeed;
 
-#define SIGNAL_MOVE 1
-#define VA_TIME_PRECISION 1000
-#define VA_AMPLITUDE_BLEND 50
-#define VA_MIN_SPEED_PERCENT 25
-#define VA_MAX_SPEED_PERCENT 150
-#define VA_MIN_AMPLITUDE 50
-#define VA_MAX_AMPLITUDE 125
-#define VA_MIN_FRAMES 1
-#define VA_MAX_FRAMES 12
-#define MOVESCALE 100
-
-#include "../variable_animation.h"
+#define Walk_MAX_SPEED_PERCENT 175
+#define Walk_SIGNAL_MASK SIGNAL_MOVE
 #include "myunit_Walk.h"
-#include "myunit_Run.h"
+
+Create()
+{
+	Walk_INIT();
+}
 
 StartMoving(reversing)
 {
 	signal SIGNAL_MOVE;
-	start-script StartWalk();
+	isMoving = TRUE;
+	start-script Walk();
 }
 
 StopMoving()
 {
 	signal SIGNAL_MOVE;
-	call-script StopWalk();
+	isMoving = FALSE;
+	call-script STOP_Walk();
 }
 ```
 
-`VA_AMPLITUDE_BLEND` selects how speed correction is divided between cadence and
-amplitude: 0 is cadence-only, 100 is amplitude-only, and 50 is the recommended
-equal split. The other limits are unit tuning policy. The shared module caps one
-source interval at 120 frames and documents the supported COB-speed bound; keep
-those constraints when choosing unusually large animation intervals or speed
-buffs. Existing checked-in animations do not need migration.
+The generated header documents every supported override next to its default. BOS
+headers contain animation code and namespaced configuration only; unit callbacks
+such as `Create`, `StartMoving`, and `StopMoving` remain owned by the including
+script.
 
 ## Recoil GLTF/GLB workflow
 
