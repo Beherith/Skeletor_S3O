@@ -29,6 +29,63 @@ https://www.youtube.com/watch?v=gH5uATTTYB4
 
 8. Enjoy!
 
+## Include-ready BOS animation export
+
+**Create BOS Includes (.h)** writes one header per selected Blender Action. Action
+names must match `[A-Za-z_][A-Za-z0-9_]*`, and the Blender scene must run at 30
+FPS. A generated header defines only `Start<Action>()` and `Stop<Action>()`, so
+several Actions can be included by one unit without duplicate policy or callback
+definitions. The authored animation is the 100% reference at `MAX_SPEED`.
+
+Variable Speed samples `CURRENT_SPEED` synchronously before every keyframe and
+preserves uneven source intervals. Variable Amplitude scales move and turn
+deviations around the first-frame stance. Variable Scale remains the independent,
+compile-time `MOVESCALE` model calibration. With Variable Amplitude but without
+Variable Speed, the owning unit may set `VA_amplitude` manually.
+
+A complete owning-script setup looks like this:
+
+```bos
+#include "constants.h"
+
+piece pelvis, thigh;
+static-var VA_frames, VA_sleepTime, VA_amplitude, VA_timeError, VA_useAmplitude;
+
+#define SIGNAL_MOVE 1
+#define VA_TIME_PRECISION 1000
+#define VA_AMPLITUDE_BLEND 50
+#define VA_MIN_SPEED_PERCENT 25
+#define VA_MAX_SPEED_PERCENT 150
+#define VA_MIN_AMPLITUDE 50
+#define VA_MAX_AMPLITUDE 125
+#define VA_MIN_FRAMES 1
+#define VA_MAX_FRAMES 12
+#define MOVESCALE 100
+
+#include "../variable_animation.h"
+#include "myunit_Walk.h"
+#include "myunit_Run.h"
+
+StartMoving(reversing)
+{
+	signal SIGNAL_MOVE;
+	start-script StartWalk();
+}
+
+StopMoving()
+{
+	signal SIGNAL_MOVE;
+	call-script StopWalk();
+}
+```
+
+`VA_AMPLITUDE_BLEND` selects how speed correction is divided between cadence and
+amplitude: 0 is cadence-only, 100 is amplitude-only, and 50 is the recommended
+equal split. The other limits are unit tuning policy. The shared module caps one
+source interval at 120 frames and documents the supported COB-speed bound; keep
+those constraints when choosing unusually large animation intervals or speed
+buffs. Existing checked-in animations do not need migration.
+
 ## Recoil GLTF/GLB workflow
 
 For a model imported through the S3O Blender workflow, export GLB with Blender's

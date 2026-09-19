@@ -54,6 +54,11 @@ import logging
 import time
 from pathlib import Path
 
+try:
+	from .bos_animation import render_bos_animation, validate_action_name
+except ImportError:  # Blender can install/run this add-on as loose source files.
+	from bos_animation import render_bos_animation, validate_action_name
+
 # Create a logger instance
 logger = logging.getLogger('skeletor_logger')
 logger.setLevel(logging.DEBUG)
@@ -129,9 +134,11 @@ INVALID_ACTION_CHARS = '\\/:*?"<>|'
 
 
 def action_name_is_valid(name):
-	if not name:
+	try:
+		validate_action_name(name)
+	except ValueError:
 		return False
-	return not any(ch in name for ch in INVALID_ACTION_CHARS)
+	return True
 
 
 def anim_action_poll(self, action):
@@ -518,7 +525,8 @@ class Skelepanel(bpy.types.Panel):
 
 		row = export_box.row()
 		row.enabled = can_export
-		row.operator("sskele.createbos", text="Create BOS")
+		row.operator("sskele.createbos", text="Create BOS Includes (.h)")
+		export_box.label(text="BOS includes require 30 FPS and unit-owned animation policy", icon="INFO")
 		row = export_box.row()
 		row.enabled = can_export
 		row.operator("sskele.createlus", text="Create LUS")
@@ -1171,9 +1179,9 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 class SkeletorBOSMaker(bpy.types.Operator):
 	bl_idname = "sskele.createbos"
 	bl_label = "Create BOS"
-	bl_description = "Export selected Anim entries as [blend]_[action].txt"
+	bl_description = "Export selected Anim entries as include-ready [blend]_[action].h files"
 	bl_options = {'REGISTER', 'UNDO'}
-	export_suffix = ".txt"
+	export_suffix = ".h"
 
 	@classmethod
 	def poll(cls, context):
@@ -1181,6 +1189,10 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 	def execute(self, context):
 		settings = context.scene.super_skeletor
+		fps = float(getattr(context.scene.render, "fps", 30) or 30)
+		if fps != 30.0:
+			self.report({'ERROR'}, "Modular BOS animation export requires a 30 FPS Blender scene")
+			return {'CANCELLED'}
 		if settings.gltf_workflow:
 			message = "glTF workflow: export GLB with Blender's +Y Up option disabled"
 			logger.warning(message)
@@ -1193,6 +1205,14 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		items = [item for item in settings.anim_exports if item.action is not None]
 		if not items:
 			self.report({'WARNING'}, "No Anim entries with a valid Action")
+			return {'CANCELLED'}
+		invalid_names = sorted({item.action.name for item in items if not action_name_is_valid(item.action.name)})
+		if invalid_names:
+			self.report({'ERROR'}, "Invalid BOS Action name(s): " + ", ".join(invalid_names))
+			return {'CANCELLED'}
+		function_names = ["Start" + item.action.name for item in items]
+		if len(function_names) != len(set(function_names)):
+			self.report({'ERROR'}, "Duplicate generated BOS function name in selected Anim entries")
 			return {'CANCELLED'}
 
 		arm, _prefix = find_export_armature(context)
@@ -1306,6 +1326,7 @@ class SkeletorBOSMaker(bpy.types.Operator):
 						p = p.parent
 
 		sample_frames = set()
+		invalid_sample_frames = set()
 		curves = get_action_fcurves(arm)
 		if curves:
 			for c in curves:
@@ -1313,7 +1334,18 @@ class SkeletorBOSMaker(bpy.types.Operator):
 				if "location" not in data_path and "rotation" not in data_path:
 					continue
 				for k in c.keyframe_points:
-					sample_frames.add(int(round(k.co[0])))
+					raw_frame = float(k.co[0])
+					resolved_frame = int(round(raw_frame))
+					if abs(raw_frame - resolved_frame) > 0.00001:
+						invalid_sample_frames.add(raw_frame)
+					sample_frames.add(resolved_frame)
+		if invalid_sample_frames:
+			message = "BOS keyframes must be on distinct integer Blender frames: " + ", ".join(
+				"%.3f" % value for value in sorted(invalid_sample_frames)
+			)
+			logger.error(message)
+			self.report({'ERROR'}, message)
+			return
 
 		if sample_frames:
 			logger.info(f'Baking evaluated pose on {len(sample_frames)} keyframe(s)')
@@ -1369,6 +1401,37 @@ class SkeletorBOSMaker(bpy.types.Operator):
 
 	def write_file(self, context, animframes, piecehierarchy, piecenameprefix = ""):
 		fps = float(getattr(context.scene.render, "fps", 30) or 30)
+		flags = get_anim_flags(self, context)
+		action_name = flags["ACTION"].name if flags["ACTION"] else "Action"
+		try:
+			content = render_bos_animation(
+				animframes,
+				action_name,
+				is_walk=flags["ISWALK"],
+				is_death=flags["ISDEATH"],
+				variable_speed=flags["VARIABLESPEED"],
+				variable_scale=flags["VARIABLESCALE"],
+				variable_amplitude=flags["VARIABLEAMPLITUDE"],
+				first_frame_stance=flags["FIRSTFRAMESTANCE"],
+				all_transforms_first=flags["ALL_TRANSFORMS_FIRST"],
+				assimp=flags["ASSIMP"],
+				move_scale=get_move_scale(context),
+				piece_name_prefix=piecenameprefix,
+				piece_hierarchy=piecehierarchy,
+				fps=fps,
+			)
+		except ValueError as error:
+			logger.error(str(error))
+			self.report({'ERROR'}, str(error))
+			return
+		newfile_name = build_export_filepath(action_name, self.export_suffix)
+		with open(newfile_name, 'w') as outf:
+			outf.write(content)
+		logger.info('Done writing include-ready BOS animation: %s', newfile_name)
+		return
+
+		# Legacy inline emitter retained temporarily below for source-history context;
+		# modular exports return above and never emit declarations or unit callbacks.
 		move_turn_miniumum_threshold = 0.0001  # skip only true no-ops; keep gait micro-offsets
 		sleepperframe = 1.0 / fps
 		# conversion time:
