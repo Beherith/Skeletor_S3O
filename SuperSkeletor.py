@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "SuperSkeletor",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (1, 1, 0),
+	"version": (1, 2, 0),
 	"blender": (5, 1, 0),
 	"location": "3D View > Side panel (SuperSkeletor)",
 	"description": "Create a Skeleton and batch-export BOS/LUS for SpringRTS / Recoil / Beyond All Reason. Compatible with Blender 2.80 – 5.1+",
