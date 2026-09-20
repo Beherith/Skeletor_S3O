@@ -83,6 +83,27 @@ def test_combined_speed_amplitude_macro_keeps_fractional_time_and_clamps_frames(
 	assert [int(value) for value in assignments] == [3, 2, 4]
 
 
+def test_speed_only_uses_lean_inverse_speed_macro_and_three_locals():
+	output = render(variable_speed=True, variable_amplitude=False)
+	assert "#ifndef Walk_MIN_ANIM_TIME" in output
+	assert "#define Walk_MIN_ANIM_TIME (Walk_DEFAULT_ANIM_TIME/2)" in output
+	assert "#ifndef Walk_MAX_ANIM_TIME" in output
+	assert "#define Walk_MAX_ANIM_TIME (Walk_DEFAULT_ANIM_TIME*3)" in output
+	assert "#ifndef Walk_CALC_DESIRED_FRAMES" in output
+	assert "Walk_currentTime = Walk_DEFAULT_ANIM_TIME * maxSpeed / (get (CURRENT_SPEED) + 1);" in output
+	assert "if (Walk_currentTime < Walk_MIN_ANIM_TIME) Walk_currentTime = Walk_MIN_ANIM_TIME;" in output
+	assert "if (Walk_currentTime > Walk_MAX_ANIM_TIME) Walk_currentTime = Walk_MAX_ANIM_TIME;" in output
+	assert "Walk_remainder_ms = Walk_currentTime % 33;" in output
+	assert "if (Walk_desiredFrames < 1) Walk_desiredFrames = 1;" in output
+	assert "Walk_CALC_DESIRED_FRAMES_AMPLITUDE" not in output
+	assert "Walk_MIN_SPEED_PERCENT" not in output
+	assert "Walk_MAX_SPEED_PERCENT" not in output
+	assert "Walk_currentPercent" not in output
+	assert "Walk_amplitude" not in output
+	local_vars = re.findall(r"^\tvar (Walk_[A-Za-z0-9_]+);", output, re.MULTILINE)
+	assert local_vars == ["Walk_remainder_ms", "Walk_currentTime", "Walk_desiredFrames"]
+
+
 def test_first_transition_count_is_a_conditional_override():
 	output = render(variable_speed=True, variable_amplitude=True)
 	calc = output.index("\t\tWalk_CALC_DESIRED_FRAMES_AMPLITUDE();")
@@ -123,7 +144,9 @@ def test_walk_speed_amplitude_option_matrix(variable_speed, variable_amplitude, 
 	assert ("get (CURRENT_SPEED)" in output) is uses_current_speed
 	commands = "\n".join(line for line in output.splitlines() if line.lstrip().startswith(("move ", "turn ")))
 	assert ("Walk_amplitude" in commands) is scales_commands
-	if not uses_current_speed:
+	if variable_amplitude:
+		assert "Walk_CALC_DESIRED_FRAMES_AMPLITUDE()" in output
+	else:
 		assert "Walk_CALC_DESIRED_FRAMES()" in output
 
 

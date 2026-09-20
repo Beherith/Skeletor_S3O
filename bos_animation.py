@@ -77,7 +77,21 @@ def _append_common_configuration(lines, namespace, *, is_walk, uses_unit_speed, 
 		"",
 	])
 
-	if uses_unit_speed:
+	speed_only = variable_speed and not variable_amplitude
+	if speed_only:
+		lines.extend([
+			"// Controls the shortest permitted time per animation frame.",
+			"#ifndef %s_MIN_ANIM_TIME" % namespace,
+			"\t#define %s_MIN_ANIM_TIME (%s_DEFAULT_ANIM_TIME/2)" % (namespace, namespace),
+			"#endif",
+			"",
+			"// Controls the longest permitted time per animation frame.",
+			"#ifndef %s_MAX_ANIM_TIME" % namespace,
+			"\t#define %s_MAX_ANIM_TIME (%s_DEFAULT_ANIM_TIME*3)" % (namespace, namespace),
+			"#endif",
+			"",
+		])
+	elif variable_amplitude:
 		lines.extend([
 			"// Controls the lowest speed percentage for the animation, given as a fraction of mastered speed",
 			"#ifndef %s_MIN_SPEED_PERCENT" % namespace,
@@ -134,6 +148,26 @@ def _append_common_configuration(lines, namespace, *, is_walk, uses_unit_speed, 
 			"\t\tif (maxSpeed < 1) maxSpeed = 1;",
 			"#endif",
 			"",
+		])
+
+	if speed_only:
+		lines.extend([
+			"// The following macro is used only within the script itself, and adjusts animation timing to unit speed.",
+			"// It also keeps track of fractional milliseconds of animation time needed.",
+			"#ifndef %s_CALC_DESIRED_FRAMES" % namespace,
+			"\t#define %s_CALC_DESIRED_FRAMES() \\" % namespace,
+			"\t\t%s_currentTime = %s_DEFAULT_ANIM_TIME * maxSpeed / (get (CURRENT_SPEED) + 1); \\" % (namespace, namespace),
+			"\t\tif (%s_currentTime < %s_MIN_ANIM_TIME) %s_currentTime = %s_MIN_ANIM_TIME; \\" % (namespace, namespace, namespace, namespace),
+			"\t\tif (%s_currentTime > %s_MAX_ANIM_TIME) %s_currentTime = %s_MAX_ANIM_TIME; \\" % (namespace, namespace, namespace, namespace),
+			"\t\t%s_currentTime = %s_desiredFrames * %s_currentTime + %s_remainder_ms; \\" % (namespace, namespace, namespace, namespace),
+			"\t\t%s_remainder_ms = %s_currentTime %% 33; \\" % (namespace, namespace),
+			"\t\t%s_desiredFrames = %s_currentTime / 33; \\" % (namespace, namespace),
+			"\t\tif (%s_desiredFrames < 1) %s_desiredFrames = 1;" % (namespace, namespace),
+			"#endif",
+			"",
+		])
+	elif variable_amplitude:
+		lines.extend([
 			"// The following macro is used only within the script itself, and is responsible for blending move speeds and and animation amplitude",
 			"// Along with keeping track of fractional milliseconds of animation time needed.",
 			"#ifndef %s_CALC_DESIRED_FRAMES_AMPLITUDE" % namespace,
@@ -146,10 +180,7 @@ def _append_common_configuration(lines, namespace, *, is_walk, uses_unit_speed, 
 			lines.append("\t\t%s_currentTime = (%s_DEFAULT_ANIM_TIME * (100 - (%s_currentPercent / 2))) / 100; \\" % (namespace, namespace, namespace))
 		else:
 			lines.append("\t\t%s_currentTime = %s_DEFAULT_ANIM_TIME; \\" % (namespace, namespace))
-		if variable_amplitude:
-			lines.append("\t\t%s_amplitude = 100 + ((%s_currentPercent * 60) / 100); \\" % (namespace, namespace))
-		else:
-			lines.append("\t\t%s_amplitude = 100; \\" % namespace)
+		lines.append("\t\t%s_amplitude = 100 + ((%s_currentPercent * 60) / 100); \\" % (namespace, namespace))
 		lines.extend([
 			"\t\t%s_currentTime = %s_desiredFrames * %s_currentTime + %s_remainder_ms; \\" % (namespace, namespace, namespace, namespace),
 			"\t\t%s_remainder_ms = %s_currentTime %% 33; \\" % (namespace, namespace),
@@ -287,7 +318,7 @@ def render_bos_animation(
 				return float(animframes[times[index]][piece][channel])
 		return 0.0
 
-	calc_macro = "%s_CALC_DESIRED_FRAMES_AMPLITUDE" % namespace if uses_unit_speed else "%s_CALC_DESIRED_FRAMES" % namespace
+	calc_macro = "%s_CALC_DESIRED_FRAMES_AMPLITUDE" % namespace if variable_amplitude else "%s_CALC_DESIRED_FRAMES" % namespace
 
 	def emit_interval(frame_index, indent, first_interval=False):
 		frame_time = times[frame_index]
@@ -302,9 +333,12 @@ def render_bos_animation(
 				"%s%s_desiredFrames = %s_FIRST_FRAME_COUNT;" % (indent, namespace, namespace),
 				"%sif (%s_desiredFrames < 1) %s_desiredFrames = 1;" % (indent, namespace, namespace),
 				"#endif",
-				"%s// Note that due to COB angular constants being 182, <1> == 182 in integers, putting the division by 100 only makes sense on speed terms, which are much larger. On the turn axis targets, constant folding would truncate our small, less than <1> angles" % indent,
-				"%s// Moves have a linear constant of 64K, so there we can safely put the division by 100 before the mults with amplitude." % indent,
 			])
+			if variable_amplitude:
+				result.extend([
+					"%s// Note that due to COB angular constants being 182, <1> == 182 in integers, putting the division by 100 only makes sense on speed terms, which are much larger. On the turn axis targets, constant folding would truncate our small, less than <1> angles" % indent,
+					"%s// Moves have a linear constant of 64K, so there we can safely put the division by 100 before the mults with amplitude." % indent,
+				])
 		frame = animframes[frame_time]
 		force_all = all_transforms_first and frame_index == 1
 		for piece in sorted(frame):
@@ -347,11 +381,12 @@ def render_bos_animation(
 		"\tvar %s_remainder_ms;" % namespace,
 		"\tvar %s_currentTime;" % namespace,
 	])
-	if uses_unit_speed:
+	if variable_amplitude:
 		lines.append("\tvar %s_currentPercent;" % namespace)
 	lines.append("\tvar %s_desiredFrames;" % namespace)
-	if uses_unit_speed:
+	if variable_amplitude:
 		lines.append("\tvar %s_amplitude; // Always expressed in percent." % namespace)
+	if uses_unit_speed:
 		lines.append("\t//%s_remainder_ms = RAND(0, 66); // Could make sense to randomize by 1 or 2 frames, but hardly noticeable anyway." % namespace)
 	lines.append("")
 

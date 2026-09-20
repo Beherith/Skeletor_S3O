@@ -49,6 +49,13 @@ animations instead use a fixed-time calculation and never read unit speed; their
 speed remains configurable through `<Action>_DEFAULT_ANIM_TIME`. Stop-animation
 speed is configurable through `<Action>_STOP_SPEED`.
 
+When Variable Speed is enabled without Variable Amplitude, the smaller
+`<Action>_CALC_DESIRED_FRAMES` path directly derives frame time from
+`MAX_SPEED / (CURRENT_SPEED + 1)`. It uses only `remainder_ms`, `currentTime`, and
+`desiredFrames` locals, with `<Action>_MIN_ANIM_TIME` and
+`<Action>_MAX_ANIM_TIME` as its timing limits. Amplitude-enabled exports use the
+larger `<Action>_CALC_DESIRED_FRAMES_AMPLITUDE` contract instead.
+
 A complete owning-script setup looks like this:
 
 ```bos
