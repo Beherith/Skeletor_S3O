@@ -1,5 +1,5 @@
 # Usage Guide:
-READ THE TUTORIAL / DOCUMENTATION HERE: https://docs.google.com/document/d/1-oMLkWHBhfN6a3a5aEZU6X02lY4aZE52nZRtrvIe4cM/edit?usp=sharing
+READ THE TUTORIAL / DOCUMENTATION HERE: [Skeletor User Documentation](Skeletor_User_Documentation.md)
 
 Video Tutorial:
 
