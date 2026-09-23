@@ -19,6 +19,8 @@ Kinematics]{.underline}](#skeleton-and-inverse-kinematics)
 > kinematics]{.underline}](#checking-the-created-bonesinverse-kinematics)
 >
 > [[Stiffening joints]{.underline}](#stiffening-joints)
+>
+> [[Choosing Actions to export]{.underline}](#choosing-actions-to-export)
 
 [[Animation]{.underline}](#animation)
 
@@ -42,31 +44,41 @@ Kinematics]{.underline}](#skeleton-and-inverse-kinematics)
 
 [[Avoiding Gimbal Lock]{.underline}](#avoiding-gimbal-lock)
 
-[[Exporting to BOS]{.underline}](#exporting-to-bos)
+[[Exporting actions]{.underline}](#exporting-actions)
 
-> [[NEW with 0.3.1: Variable scale BOS
-> scripts]{.underline}](#new-with-0.3.1-variable-scale-bos-scripts)
+> [[BOS includes and integration]{.underline}](#bos-includes-and-integration)
 >
-> [[BOS integration checklist:]{.underline}](#bos-integration-checklist)
+> [[Other export targets]{.underline}](#other-export-targets)
+>
+> [[Modern model workflows]{.underline}](#modern-model-workflows)
 
 [[Troubleshooting]{.underline}](#troubleshooting)
 
-> [[My BOS output is empty]{.underline}](#my-bos-output-is-empty)
+> [[BOS export did not produce a header]{.underline}](#bos-export-did-not-produce-a-header)
 
 [[Youtube Sources]{.underline}](#youtube-sources)
 
 # Requirements
 
-1.  Blender v2.82a (Seems that higher than 2.8 has issues with importing
-    s3os,, and lower than 2.8 doesn\'t work at all)
+1.  The current add-on metadata targets Blender 5.1. SuperSkeletor also
+    contains a compatibility path for legacy Actions, but earlier Blender
+    releases should be tested with the model pipeline before production use.
 
-2.  The scripts from:
+2.  The current SuperSkeletor add-on from:
     [[https://github.com/Beherith/Skeletor_S3O]{.underline}](https://github.com/Beherith/Skeletor_S3O)
 
-3.  Register the s3o_import.py script and the skeletorscript.py from the
-    repository as a plugin in blender's preferences. This is mandatory.
+3.  Enable **SuperSkeletor** in Blender's Add-ons preferences. When
+    installing from source, keep `SuperSkeletor.py` and `bos_animation.py`
+    together. `skeletorscript.py` is the legacy exporter and is not the
+    add-on described in this guide.
 
-4.  UpSpring - to correct s3o hierarchies if needed
+4.  Enable `s3o_import.py` too when importing S3O files directly. UpSpring
+    remains useful for inspecting or repairing S3O hierarchies, but is not
+    required for an already-prepared Blender or GLTF model.
+
+The screenshots in this document come from the previous Skeletor interface.
+Use the current control names quoted in the text: the panel is called
+**SuperSkeletor**, in the 3D View side panel.
 
 # Setting up S3O's in UpSpring
 
@@ -101,27 +113,28 @@ corshiva blend file in the repo
 ([[https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend]{.underline}](https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend)
 )
 
-Add the
-[[skeletorscript.py]{.underline}](https://github.com/Beherith/Skeletor_S3O/blob/master/skeletorscript.py)
-script to blender (or just use the corshiva blend file and just delete
-all the objects from it) from the repository as a plugin in blender's
-preferences. This is mandatory.
+Enable **SuperSkeletor** in Blender's Add-ons preferences. The old
+`skeletorscript.py` add-on mentioned in previous versions of this tutorial
+is not used by the current workflow.
 
 **Import the model into blender via the Import Spring ZY S3O menu in
 blender.**
 
 ~~Select the pelvis (or root piece) of the model.~~
 
-**Deselect everything, then Click on Scene Collection in the top
-right:**
+In the Outliner, make the collection containing the complete model hierarchy
+the active collection. SuperSkeletor finds the S3O root and pieces in that
+collection. Before creating a skeleton, apply the model's rotation and scale
+if they have not already been applied.
 
 ![](images/media/image22.png){width="3.4479166666666665in"
 height="1.6666666666666667in"}
 
-Click the 1. Create Skeleton button in the SkeletorS3O panel on the
-right of the 3D view. If the side panel is not visible, click the little
-arrow in the top right corner (circled where that tiny arrow should be
-on image below) to bring it up.
+Open the 3D View side panel (`N`) and select the **SuperSkeletor** tab. In
+the **Skeleton** section, click **Create Skeleton**. If you want automatic
+IK controllers, enable **Add IK targets to chains** first: it is disabled by
+default. **IK targets at leafs** selects whether the target is placed on a
+leaf or one branch above it.
 
 ![](images/media/image1.png){width="6.5in"
 height="3.2083333333333335in"}
@@ -144,9 +157,9 @@ Note that we will not use inverse kinematics poles in the animations,
 instead I stiffen the Z axis joints, as poles are more problematic to
 work with for elbows and knees.
 
-The skeleton creator can be a little bit overzealous in placing inverse
-kinematics targets on all appendages. You can disable/edit these in pose
-mode (select a bone, choose pose mode from top left dropdown menu).
+When **Add IK targets to chains** is enabled, the skeleton creator can be a
+little bit overzealous in placing inverse-kinematics targets on appendages.
+You can disable or edit these in Pose Mode.
 
 You can tune the chain lengths and targets here. **Setting chain lengths
 to zero means all pieces up to root will be in IK.**
@@ -169,6 +182,26 @@ height="4.114583333333333in"}
 You can also show/hide bone names on the skeleton:
 ![](images/media/image4.png){width="2.4375in"
 height="5.208333333333333in"}
+
+# Choosing Actions to export
+
+SuperSkeletor exports Blender **Actions**, not one implicit timeline. In the
+**Anim Exports** section, click **New**, select an **Action**, and set that
+entry's options. Add one entry for every Action you want to export; an Action
+can only appear once in the list. Clicking an export button processes every
+entry with a selected Action and creates one file per Action.
+
+The options belong to the selected Anim Export entry:
+
+- **Is Walk Script** makes the animation loop. Its walk-specific options are
+  **Variable Speed**, **Variable Scale**, and **Variable Amplitude**.
+- **First Frame Stance** records the first frame as the pose to restore when
+  stopping. It is enabled by default.
+- **All Transforms on First Frame** explicitly emits every transform on the
+  first written animation frame, which is useful when a consumer needs a
+  complete initial pose.
+- **Is Death Script** enables exploding pieces when their movement crosses
+  the death-animation threshold described below.
 
 # Animation
 
@@ -241,14 +274,14 @@ height="2.861111111111111in"}
 
 The first keyframe at pos 1 should be the default idle position of the
 unit, so the first step is animated nicely. **You can pose your unit on
-the first keyframe to its 'idle' stance, does not have to be all zeros,
-skeletor will handle this fine**. Make sure 'First frame stance' is
-checked if you want this, otherwise idle pose will default to all zero
-pose.
+the first keyframe to its 'idle' stance; it does not have to be all zeros.**
+Keep **First Frame Stance** enabled for this Action if you want the generated
+stop function to return to that pose; otherwise its fallback is zero.
 
-Don\'t leave empty keyframes on pieces, as Skeletor will have trouble
-interpolating the correct speeds (e.g no keyframe for torso on frame 32
-in my pic)
+You do not need blank LocRot keys on a pelvis or another non-IK bone.
+SuperSkeletor samples the evaluated pose at the Action's location and
+rotation keyframes, so an IK target can drive an exported chain by itself.
+For BOS exports, all sample keys must lie on distinct integer Blender frames.
 
 The last keyframe should be identical to the second keyframe (so the
 animation loops correctly).
@@ -320,20 +353,20 @@ them to the first half of the animation.
 
 ## Idle animations![](images/media/image13.png){width="2.3541666666666665in" height="3.0729166666666665in"}
 
-These do not have to have keyframes placed evenly.
-
-Uncheck 'is walk script' and 'variable speed'.
+These do not have to have keyframes placed evenly. Disable **Is Walk Script**
+for the Action. Walk-only speed options are ignored for idle and death
+exports, which use fixed animation timing.
 
 ## Death animations **NEW!**
 
 Note that there is no real performance limit on keyframes or anything
-for these. Go nuts! Uncheck 'is walk script' and 'variable speed', and
-check 'Is Death Animation'
+for these. Go nuts! Disable **Is Walk Script** and enable **Is Death Script**
+for the Action. Walk-only speed settings do not affect death exports.
 
-**To explode pieces off the model, move the respective bone at least 200
-units away from its normal position, this is what tells the script to
-hide that piece and make it fly off. All children of that piece will fly
-off too.**
+**To explode pieces off the model, make the respective bone's movement change
+by more than 100 units between sampled frames.** This tells the exporter to
+hide that piece and make it fly off. All children of that piece will fly off
+too.
 
 ### Starting position - Power Stance!
 
@@ -384,7 +417,8 @@ from moving and from being selected.
 
 Sometimes, especially due to the use of IK targets, when bones are
 rotated \~90 degrees along their major axis, further rotations can be
-affected by gimbal lock. The Bone angles panel in the Misc tab alerts
+affected by gimbal lock. The **Bone Angles** panel in the 3D View side panel
+alerts
 you of possible gimbal lock conditions being present at a given point in
 time. Scrub through your animation and watch if any of the bone angles
 go red. The recommended mitigation is to move the IK targets around a
@@ -402,58 +436,125 @@ back to normal for the next and previous
 frames!![](images/media/image12.png){width="1.9791666666666667in"
 height="1.1770833333333333in"}
 
-# Exporting to BOS
+# Exporting actions
 
-Once satisfied with the animation, save your work in a .blend file, and
-you can export it to the same folder the .blend file is in
-(bos_export.txt) by clicking the Create Bos in the SkeletorS3O panel.
-Copy-paste into BOS, compile and enjoy!
+Save the `.blend` file, add the Actions you want under **Anim Exports**, and
+click an export button in the **Export** section. By default, each file is
+written beside the blend file as `[blend]_[action]` plus its extension. Enable
+**Export to Subfolder** to write them into a named folder beside the blend
+file instead.
 
-### [NEW with 0.3.1: Variable scale BOS scripts]{.mark}
+Action names are converted to safe BOS identifiers and filenames: invalid
+characters become underscores, and a leading digit receives an underscore.
+For BOS, two Action names that normalize to the same identifier cannot be
+exported together.
 
-You can now click on **Variable scale** on the SkeletorS3O panel. This
-will export all move commands with a MOVESCALE parameter. This is
-#define MOVESCALE 100 by default, and allows you to scale move commands
-(which make scaling units easier, as turn commands are scale-invariant
-by definition, move commands are not).
+**Create BOS Includes (.h)** requires an effective scene rate of exactly
+30 FPS and writes one include-ready header per Action. It does not write the
+old `bos_export.txt` file. A BOS export needs at least two distinct,
+integer-frame samples; a looping walk needs a stance/entry frame plus at
+least one loop frame.
 
-### BOS integration checklist:
+**Multiply Movement Scale** applies a scene-wide multiplier to exported move
+targets and move speeds; turns are unaffected. This is separate from the
+per-Action **Variable Scale** option.
 
-- **#define SIG_WALK** is defined and does not overwrite any other
-  signals
+## BOS includes and integration
 
-- SmokeUnit(): **start-script UnitSpeed();** //after get build percent
-  left
+Generated `.h` files are intended to be `#include`d by the owning unit
+script. Their functions, variables, and configuration macros are namespaced
+by Action name, so headers for several animations can coexist in one unit.
+For an Action named `Walk`, the public entry points are `Walk()`,
+`STOP_Walk()`, and—when Variable Speed or Variable Amplitude is enabled—
+`Walk_INIT()`.
 
-- Create(): set the **animSpeed = 4;** // or whatever your keyframe
-  interval is to avoid div/0 error
+The generated header documents its supported overrides. Examples include
+`Walk_SIGNAL_MASK`, `Walk_DEFAULT_ANIM_TIME`, `Walk_STOP_SPEED`, and, when
+Variable Scale is enabled, `Walk_MOVESCALE`. Variable Amplitude adds the
+speed range and `Walk_BLEND_PERCENT` configuration. Do not add the legacy
+global `MOVESCALE`, `SIG_WALK`, or `animSpeed` setup from older Skeletor
+exports.
 
-- AimWeaponX(): set the aimed pieces to aimy1 and aimx1, if needed
+A minimal owning-script setup for a speed-dependent walk looks like this:
 
-- RestoreAfterDelay(): restore aimy1 and aimx1, if needed
+```bos
+#include "constants.h"
 
-Known bugs: none, we just call them 'Happy accidents'. Open issues on
-github!
+piece pelvis, thigh;
+static-var isMoving, maxSpeed;
+
+#define Walk_SIGNAL_MASK SIGNAL_MOVE
+#include "myunit_Walk.h"
+
+Create()
+{
+	Walk_INIT();
+}
+
+StartMoving(reversing)
+{
+	signal SIGNAL_MOVE;
+	isMoving = TRUE;
+	start-script Walk();
+}
+
+StopMoving()
+{
+	signal SIGNAL_MOVE;
+	isMoving = FALSE;
+	call-script STOP_Walk();
+}
+```
+
+If neither Variable Speed nor Variable Amplitude is enabled, omit `maxSpeed`
+and the `Walk_INIT()` call. The unit script remains responsible for its own
+callbacks, aim handling, and signal choices.
+
+## Other export targets
+
+**Create LUS** writes one `[blend]_[action].lua` Lua Unit Script export per
+Action. **Create LUS Tween** writes `[blend]_[action]_tween.lua` for the
+SpringTweener-style tween workflow. These exporters use the same Anim Export
+list and per-Action options as BOS.
+
+## Modern model workflows
+
+Use **Assimp Workflow** when your pipeline needs Blender/Assimp axis
+rotation conventions. **Assimp Workflow Skeleton** aligns newly created
+bones to local space for that workflow. **Export for Skinning** is intended
+for compatible existing deform-bone rigs; an armature with deform bones is
+still required for export.
+
+For Recoil GLTF/GLB models, export the GLB with Blender's **+Y Up** option
+disabled and set the Scene custom property `s3ocompat=true` for an
+S3O-derived model. Enable **glTF Workflow** before export to have
+SuperSkeletor check these conditions and warn about animated non-identity
+local rest rotations. BOS/LUS axes remain the same as the S3O workflow: do
+not add a `#define GLTF` or use deprecated GLTF axis-remapping compiler
+flags.
 
 # Troubleshooting
 
-You can toggle the debug output of the script from the blender system
-console. It probably won't be very helpful to you, but will help me in
-finding out what went wrong.
+SuperSkeletor writes diagnostic output to Blender's system console and to a
+timestamped `skeletorscript_log_*.txt` file in the user's home directory.
+There is no panel toggle for debug logging in the current add-on.
 
-![](images/media/image16.png){width="6.5in"
-height="2.6527777777777777in"}
+## BOS export did not produce a header
 
-## My BOS output is empty
+Check the following before adding dummy keys:
 
-**You must add at least 1 keyframe to a bone that is NOT an iktarget at
-every key frame you want exported.** E.g. in the below case, for each
-iktarget bone movement, I have added a blank LocRot keyframe to the
-pelvis bone. You might think you have a LocRot added, but in all cases
-manually add one (hotkey i).
+- At least one **Anim Export** entry has an Action selected.
+- The scene's effective FPS (FPS divided by FPS Base) is exactly 30.
+- The exporter must obtain at least two distinct integer-frame samples; a
+  walk needs at least three. It normally uses location and rotation keys and
+  falls back to sampling the Action range every three frames when none exist.
+- No key is on a fractional frame, and selected Action names do not collide
+  after BOS identifier sanitization.
+- An armature with deform bones exists in the scene.
 
-![](images/media/image17.png){width="6.5in"
-height="1.0972222222222223in"}
+The exporter bakes the evaluated pose of every deform bone at sampled frames.
+Keys placed only on IK targets are valid; do not add blank LocRot keys to the
+pelvis merely to make an export appear.
 
 # Youtube Sources 
 
