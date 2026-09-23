@@ -15,7 +15,7 @@
 bl_info = {
 	"name": "SuperSkeletor",
 	"author": "Beherith  <mysterme@gmail.com>",
-	"version": (1, 2, 0),
+	"version": (1, 3, 0),
 	"blender": (5, 1, 0),
 	"location": "3D View > Side panel (SuperSkeletor)",
 	"description": "Create a Skeleton and batch-export BOS/LUS for SpringRTS / Recoil / Beyond All Reason. Compatible with Blender 2.80 – 5.1+",
@@ -27,7 +27,7 @@ bl_info = {
 }
 import bpy
 from math import pi, degrees, radians
-from mathutils import Vector, Euler, Matrix
+from mathutils import Vector
 
 from bpy.props import (StringProperty,
 					   BoolProperty,
@@ -45,7 +45,7 @@ from bpy.types import (Panel,
 					   )
 
 # S3O and engine-canonical GLTF models share the same BOS Euler convention.
-OMITDELTAOUTPUT = True # <= Hide the -- delta comments at the ends of the lines, to reduce fileSize
+OMITDELTAOUTPUT = True
 ROTATION_MODE = "YXZ"
 FullDebug = False
 
@@ -59,22 +59,17 @@ try:
 except ImportError:  # Blender can install/run this add-on as loose source files.
 	from bos_animation import render_bos_animation, sanitize_animation_name
 
-# Create a logger instance
 logger = logging.getLogger('skeletor_logger')
 logger.setLevel(logging.DEBUG)
- 
-# Create a formatter to define the log message format
+
 formatter = logging.Formatter('%(levelname)s: %(message)s')
 
-# Create a file handler to write logs to a file
 file_handler = logging.FileHandler(f'{Path.home()}/skeletorscript_log_{time.strftime("%Y%m%d-%H%M%S")}.txt')
 file_handler.setFormatter(formatter)
 
-# Create a stream handler to write logs to the standard output (console)
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
 
-# Add both handlers to the logger
 logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
@@ -619,7 +614,7 @@ class S3opiece:
 			','.join([child.name for child in self.children]),
 			self.loc, self.object, self.mesh, self.worldpos))
 
-	def recursefixworldpos(self, parentpos):  # note: doesnt work
+	def recursefixworldpos(self, parentpos):
 		self.worldpos = self.loc + parentpos
 		for child in self.children:
 			child.recursefixworldpos(self.worldpos)
@@ -636,7 +631,7 @@ class S3opiece:
 					if i != k and nolrname(child.name) == nolrname(sibling.name):
 						isLR = True
 						logger.info(f'Found a left-right pairing of bones: {self.name} at { self.worldpos}')
-						if self.worldpos[0] > 0:  # LEFT
+						if self.worldpos[0] > 0:
 							child.recurseleftrightbones(tag='.L')
 						else:
 							child.recurseleftrightbones(tag='.R')
@@ -674,16 +669,13 @@ def getmeshbyname(name):
 
 
 def getS3ORootObject():
-	#bpy.ops.outliner.item_activate(deselect_all=True) # God knows why this might be needed, but blender 3.6+ refuses to work without this 
 	logger.info(f'Searching for S3O root object.')
 	currentCollection = bpy.context.collection
-	# Safely ensure we are in Object mode (avoids errors when no active object exists)
 	try:
 		if bpy.context.object is not None:
 			bpy.ops.object.mode_set(mode='OBJECT')
 	except Exception:
 		pass
-	#for obj in bpy.data.objects:
 	for obj in currentCollection.all_objects:
 		
 		logger.info(f'{obj} in currentCollection.all_objects: {obj.name} {obj.parent}')
@@ -694,30 +686,8 @@ def getS3ORootObject():
 			for child in bpy.data.objects:
 				if child.parent and child.parent == obj:
 					logger.info(f'Root object found: {obj}')
-					return obj, obj.name    # rootObject, rootName
-	return None, ""     # I don't think this would ever happen, but who knows
-
-
-def properrot(bone, MYEULER='YXZ', parentEULER=True):
-	# MYEULER = 'YXZ' #'ZXY' #BECAUSE FUCK ME THATS WHY
-	bone_matrix = bone.matrix.copy()
-	parent_bone_matrix = bone.matrix.copy()
-	current_bone = bone
-	if current_bone.parent is not None:
-		parent_bone_matrix = current_bone.parent.matrix.copy()
-		parent_bone_matrix.invert()
-		# bone_matrix = bone_matrix @ parent_bone_matrix # OH BOY IS THIS WRONG!
-		bone_matrix = parent_bone_matrix @ bone_matrix
-
-		current_bone = current_bone.parent
-
-	if parentEULER:
-		rot = bone_matrix.to_euler(MYEULER, parent_bone_matrix.to_euler(MYEULER))
-	else:
-		rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
-	rotation_text = '%s %s %i X:%.1f Y:%.1f Z:%.1f' % (
-		bone.name, MYEULER, parentEULER, degrees(rot.x), degrees(rot.y), degrees(rot.z))
-	return rotation_text
+					return obj, obj.name
+	return None, ""
 
 
 class SkeletorRotator(bpy.types.Operator):
@@ -742,20 +712,14 @@ class SkeletorRotator(bpy.types.Operator):
 		bpy.ops.object.select_all(action='DESELECT')
 		rootObject.select_set(True)
 
-		# bpy.ops.transform.rotate(value=-pi/2, orient_axis='Z', orient_type='VIEW', orient_matrix=((0, -1, 0), (0, 0, -1), (-1, 0, 0)), orient_matrix_type='VIEW', mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1, use_proportional_connected=False, use_proportional_projected=False)
 		bpy.context.object.rotation_euler[0] = pi / 2
 
 		bpy.ops.object.select_all(action='DESELECT')
 		bpy.ops.object.select_all(action='SELECT')
 		bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 
-		# return
 		bpy.ops.object.select_all(action='DESELECT')
 		rootObject.select_set(True)
-		oldz = bpy.context.object.location[2]
-		oldy = bpy.context.object.location[1]
-		# bpy.context.object.location[1] = oldz
-		# bpy.context.object.location[2] = oldy
 		bpy.ops.object.select_all(action='SELECT')
 
 		bpy.ops.transform.translate(value=(0, -10.9483, 13.9935), orient_type='GLOBAL',
@@ -792,8 +756,7 @@ class SkeletorOperator(bpy.types.Operator):
 		ASSIMP = context.scene.super_skeletor.assimp_workflow_skeleton
 		DISABLE_AUTO_SUFFIX = context.scene.super_skeletor.disable_auto_suffix
 
-		# debug delete all armatures and bones!
-		# Need an active object or mode_set() throws in Blender 4/5
+		# Blender requires an active object before changing modes.
 		if context.view_layer.objects.active is None:
 			for obj in context.scene.objects:
 				context.view_layer.objects.active = obj
@@ -806,37 +769,22 @@ class SkeletorOperator(bpy.types.Operator):
 				bpy.data.objects.remove(obj, do_unlink=True)
 
 		pieces = {}  # {"name":s3opiece}
-		# collect the data we need:
-		# object of each piece
-		# root object
-		# the offsets of each object
-		# the children of each object
-		# the amount of geometry each object has.
-
-		# find the object with no parents, but has children (root) - ignore *SpringHeight and *SpringRadius
-		# TODO: Pass currentCollection here
 		rootObject, rootName = getS3ORootObject()
 
-		# got the root!
-
-		rootPiece = S3opiece(rootObject.name, rootObject, getmeshbyname(rootObject.name), # localPos[0][3], localPos[1][3], localPos[2][3])
-							 rootObject.location[0], rootObject.location[1], rootObject.location[2])    # Root is always in world coords
+		rootPiece = S3opiece(rootObject.name, rootObject, getmeshbyname(rootObject.name),
+							 rootObject.location[0], rootObject.location[1], rootObject.location[2])
 
 		logger.info(f'The root piece is:{rootPiece}')
 
 		logger.info("====Collecting Pieces====")
 		pieces[rootName] = rootPiece
 		currentCollection = bpy.context.collection
-		# for obj in bpy.data.objects:
 		for obj in currentCollection.all_objects:
 			if obj.parent is not None:
-				localPos = obj.matrix_local  # local x = [0][3], y = [1][3], z = [2][3]
-				# x, y, z = obj.matrix_world.to_3x3().col
-				#globalCoords = obj.matrix_world.translation
-				#localMatrix = obj.matrix_world.inverted() @ obj.matrix_world.translation
+				localPos = obj.matrix_local
 
-				newPiece = S3opiece(obj.name, obj, getmeshbyname(obj.name), # localCoords[0], localCoords[1], localCoords[2])
-									localPos[0][3], localPos[1][3], localPos[2][3]) #obj.location[0], [1], [2]
+				newPiece = S3opiece(obj.name, obj, getmeshbyname(obj.name),
+									localPos[0][3], localPos[1][3], localPos[2][3])
 				logger.info("\n")
 				logger.info(f'Found a new piece {newPiece}')
 				pieces[newPiece.name] = newPiece
@@ -849,9 +797,9 @@ class SkeletorOperator(bpy.types.Operator):
 
 		rootPiece.recursefixworldpos(Vector((0, 0, 0)))
 
-		openNodes = set()  # Set to keep track of visited nodes.
+		openNodes = set()
 		openNodes.add(rootPiece)
-		dfs_piece_order = []  # [rootPiece.name]
+		dfs_piece_order = []
 
 		while len(openNodes) > 0:
 			nodelist = list(openNodes)
@@ -878,12 +826,10 @@ class SkeletorOperator(bpy.types.Operator):
 					logger.error(f'Failed to reparent piece {piece} from parent {piece.parent} to grandparent {piece.parent.parent}')
 					raise
 
-		# final check that we have all set:
 		logger.info("\n\n----------Sanity check:-----------")
 		for k, v in pieces.items():
 			logger.info(f'{k} {v}')
 
-		# set the cursor to origin:
 		bpy.ops.transform.translate(value=(0, 0, 0), orient_type='GLOBAL',
 									orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL',
 									mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH',
@@ -896,12 +842,11 @@ class SkeletorOperator(bpy.types.Operator):
 			obj.select_set(False)
 			obj.rotation_mode = ROTATION_MODE
 
-		# add an armature!
 		logger.info("\n\n====Creating Armature====")
 		arm_data = bpy.data.armatures.new("Armature")
 
 		armature_object = bpy.data.objects.new("Armature", arm_data)
-		armature_object.location = Vector((0, 0, 0))  # rootpiece.loc
+		armature_object.location = Vector((0, 0, 0))
 		armature_object.show_in_front = True
 		armature_object.data.show_axes = True
 		armature_object.data.show_names = True
@@ -916,11 +861,7 @@ class SkeletorOperator(bpy.types.Operator):
 
 		bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 		bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-		#bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-
 		logger.info("\n\n====Looking for mirrorable pieces===")
-		# to enable : https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle
-		# rootpiece.recurseleftrightbones()
 		for name, piece in pieces.items():
 			piece.bonename = name
 			if not DISABLE_AUTO_SUFFIX:
@@ -949,7 +890,7 @@ class SkeletorOperator(bpy.types.Operator):
 				if NOTAIL:
 					newbone.tail = newbone.head + Vector((0, 5, 0))
 
-				tailpos = piece.loc + Vector((0, 5, 0))  # 0, 0 10
+				tailpos = piece.loc + Vector((0, 5, 0))
 				if len(piece.children) >= 1:
 					tailpos = Vector((0, 0, 0))
 					for child in piece.children:
@@ -957,9 +898,8 @@ class SkeletorOperator(bpy.types.Operator):
 					tailpos = tailpos / len(piece.children)
 					newbone.tail = tailpos
 					if NOTAIL:
-						newbone.tail = newbone.head + Vector((0, 5, 0))  # TODO fixme
-					# TODO: Something is an arm if it has only nomesh children
-					# thus we add a forward pointing IK target to its tailpos
+						newbone.tail = newbone.head + Vector((0, 5, 0))
+					# Empty leaf children identify a likely arm chain.
 					onlyemptychildren = True
 					for child in piece.children:
 						if child.mesh is not None:
@@ -970,35 +910,29 @@ class SkeletorOperator(bpy.types.Operator):
 						ikbone.head = newbone.tail
 						ikbone.tail = newbone.tail + Vector((0, 5, 0))
 						piece.iktarget = ikbone
-				else:  # end piece
-					# TODO: CHECK FOR GEOMETRY, is it a foot or an arm or a tentacle ?
-					# TODO: multiple branches for multiple toes give too many IK targets :/
+				else:
 					if piece.mesh is not None and piece.parent.iktarget is None:
 						boundingbox = piece.getmeshboundingbox()
 
 						logger.info(f'LOOKS LIKE A FOOT: { piece.name}  {piece.worldpos} {boundingbox}')
 						if piece.worldpos[2] + boundingbox[4] <= 2.0:
-							# this looks like a foot
 							tailpos = piece.worldpos + Vector((0, boundingbox[3], boundingbox[4]))
-							# better add the heel IK thing too XD
 							if AUTOADDIK:
 								if not IKTARGETENDS:
 									heelbone = arm_data.edit_bones.new('iktarget.' + piece.parent.bonename)
-									heelbone.head = piece.parent.bone.tail  # newbone.head
+									heelbone.head = piece.parent.bone.tail
 									heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
 									if NOTAIL:
 										heelbone.tail = heelbone.head + Vector((0, 5, 0))
 									piece.parent.iktarget = heelbone
 								else:
 									heelbone = arm_data.edit_bones.new('iktarget.' + piece.bonename)
-									heelbone.head = newbone.tail  # newbone.head
+									heelbone.head = newbone.tail
 									heelbone.tail = newbone.head + Vector((0, boundingbox[4], 0))
 									if NOTAIL:
 										heelbone.tail = heelbone.head + Vector((0, 5, 0))
 									piece.iktarget = heelbone
 						else:
-							# todo this is not a foot
-							# guess if it points forward or up or down?
 							if boundingbox[5] > boundingbox[3] and boundingbox[5] > -1 * boundingbox[2]:  # points forward
 								tailpos = piece.worldpos + Vector((0, boundingbox[5], 0))
 							else:
@@ -1006,49 +940,24 @@ class SkeletorOperator(bpy.types.Operator):
 									tailpos = piece.worldpos + Vector((0, 0, boundingbox[3]))  # up
 								else:
 									tailpos = piece.worldpos + Vector((0, 0, boundingbox[2]))  # down
-
-					# TODO we are also kind of a foot if we only have children with no meshes.
 					else:
 						tailpos = piece.worldpos + Vector((0, 5, 0))
 				newbone.tail = tailpos
 
-			# TODO: easier rotations like this?
-			# This is where the world axis is always assigned to the bones rotations
 			if NOTAIL:
 				newbone.tail = newbone.head + Vector((0, 5, 0))
 
 			if ASSIMP:
-				# x, y, z = newbone.matrix.to_3x3().col
-				# # rotation matrix 30 degrees around local x axis thru head
-				# R = (Matrix.Translation(newbone.head) @
-				# 	 Matrix.Rotation(radians(30), 4, x) @
-				# 	 Matrix.Translation(-newbone.head)
-				# 	 )
-				# # bone.matrix = R @ bone.matrix
-				# bone.transform(R)
-				old_head = newbone.head.copy()
-
-				# Get local matrix of object
 				obj = piece.object
 				R = obj.matrix_world
-				#pos, rot, scl = R.decompose()
-
-				# That's how you'd apply individual rotations, but that's not needed for our purpose
-				# R = (Matrix.Rotation(rot[0], 4, newbone.y_axis.normalized()) @  # newbone.y_axis.normalized()
-				# 	 Matrix.Rotation(rot[1], 4, newbone.x_axis.normalized()) @  # newbone.x_axis.normalized()
-				# 	 Matrix.Rotation(rot[2], 4, newbone.z_axis.normalized())  # newbone.z_axis.normalized()
-				# 	)
-				#newbone.transform(R, roll=False)
-
 				newbone.matrix = R
 				bpy.context.view_layer.update()
 
 			logger.info("trying to add bone to %s\nat head:%s \ntail:%s" % (piece, newbone.head, newbone.tail))
 			piece.bone = newbone
-		# return
 		logger.info("=====Reparenting Bone-Bones=======")
 
-		for name, piece in pieces.items(): # not getattr(piece.parent, "name", "None") and
+		for name, piece in pieces.items():
 			if piece.parent is not None and not piece.isAimXY:
 				logger.info("piece " + name + " | parent: " + piece.parent.name)
 				piece.bone.parent = piece.parent.bone
@@ -1061,7 +970,7 @@ class SkeletorOperator(bpy.types.Operator):
 		if AUTOADDIK:
 			for name, piece in pieces.items():
 				if not piece.isAimXY:
-					armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE  # ROTATION_MODE = 'YXZ'  # was: 'ZXY'
+					armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE
 
 				if piece.iktarget is not None and piece.parent is not None:
 					chainlength = 1
@@ -1077,10 +986,9 @@ class SkeletorOperator(bpy.types.Operator):
 					armature_object.pose.bones[piece.bonename].ik_stiffness_z = 0.99  # avoids having to create knee poles
 		else:
 			for name, piece in pieces.items():
-				armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE  # was: 'ZXY'
+				armature_object.pose.bones[piece.bonename].rotation_mode = ROTATION_MODE
 
 		logger.info("=====Parenting meshes to bones=======")
-		# getting desperate here: https://blender.stackexchange.com/questions/77465/python-how-to-parent-an-object-to-a-bone-without-transformation
 		for name, piece in pieces.items():
 			if piece.isAimXY:
 				continue
@@ -1108,17 +1016,9 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 	bl_region_type = 'UI'
 
 	def draw(self, context):
-		# print ("DrawSimpleBonesAnglesPanel")
 		if 'Armature' not in context.scene.objects:
 			return
 		arm = context.scene.objects['Armature']
-		props = {"location": "move", "rotation_euler": "turn"}
-
-		selectednames = []
-		if bpy.context.selected_pose_bones is not None:
-			for o in bpy.context.selected_pose_bones:
-				selectednames.append(o.name)
-		# print (selectednames)
 		for bone in arm.pose.bones:
 			if not bone.bone.use_deform:
 				continue
@@ -1126,7 +1026,7 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 				continue
 
 			bone_name = bone.name
-			MYEULER = 'YXZ'  # 'ZXY' #BECAUSE FUCK ME THAT'S WHY
+			MYEULER = 'YXZ'
 			bone_matrix = bone.matrix.copy()
 
 			parent_bone_matrix = bone.matrix.copy()
@@ -1134,34 +1034,13 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 			if current_bone.parent is not None:
 				parent_bone_matrix = current_bone.parent.matrix.copy()
 				parent_bone_matrix.invert()
-				# bone_matrix = bone_matrix @ parent_bone_matrix # OH BOY IS THIS WRONG!
 				bone_matrix = parent_bone_matrix @ bone_matrix
 				current_bone = current_bone.parent
 
-			# there seems to be a major difference in IK based rots, and manual rots.
-			# the matrix inversion with 'YXZ' euler order seems to be correct for IK targetted bones
-			# but its way overkill for manually rotated stuff
-			# maybe there are two separate rotations, e.g.
-			# bpy.context.object.pose.bones["rdoor.R"].rotation_euler[0] = 0.105584
-			# and the parent matrix based one
-			# but how to choose between these for IK and FK bones?
-			# use the locs  and rots from the fcurves, and then in pass 2 merge on the actual ones?
-			# We KNOW which bones have FK fcurves - those are the ones manually set
-			# We can also figure out, from the IK constraints and the chain lengths, which bones have IK on them
-			# bpy.context.object.pose.bones["rankle.R"].constraints["IK"].mute = False
-
-			rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
+			rot = bone_matrix.to_euler(MYEULER)
 
 			row = self.layout.row()
 			rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
-			# print (rotation_text)
-			# if bone_name in selectednames:
-			#     rotation_text = '  '+rotation_text.upper()
-			#     for eulertype in ['XYZ','XZY','YXZ','YZX','ZXY','ZYX']:
-			#         for ptype in [False,True]:
-			#             row.label(text = properrot(bone,MYEULER = eulertype, parentEULER = ptype))
-			#             row = self.layout.row()
-
 			if sum([abs(degrees(rot.x)), abs(degrees(rot.y)), abs(degrees(rot.z))]) > 135:
 				rotation_text = '[!] ' + rotation_text
 				row.alert = True
@@ -1174,14 +1053,6 @@ class SimpleBoneAnglesPanel(bpy.types.Panel):
 														   )
 			row.label(text=rotation_text)
 
-
-# row.label(text='X%.1f'%(bone_matrix[0][3]))
-# row.label(text='Y%.1f'%(bone_matrix[1][3]))
-# row.label(text='Z%.1f'%(bone_matrix[2][3]))
-
-
-# # This is the base class which all Skeleton-Makers derive from.
-# # Override the write_file (and tobos, if needed) methods to add your new export option logic.
 class SkeletorBOSMaker(bpy.types.Operator):
 	bl_idname = "sskele.createbos"
 	bl_label = "Create BOS"
@@ -1258,13 +1129,8 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		self.report({'INFO'}, "Exported: " + ", ".join(exported))
 		return {'FINISHED'}
 
-	# Note: Do NOT define a custom __init__ that only takes `self`.
-	# Blender 4.x/5.x passes extra arguments when constructing Operators.
-	# whichframe is initialized lazily below.
-
 	def tobos(self, context):
 		logger.info("MAKING BOS, BOSS")
-		# Lazy init (safe across Blender versions)
 		if not hasattr(self, "whichframe"):
 			self.whichframe = 0
 		scene = context.scene
@@ -1438,343 +1304,6 @@ class SkeletorBOSMaker(bpy.types.Operator):
 		logger.info('Done writing include-ready BOS animation: %s', newfile_name)
 		return True
 
-		# Legacy inline emitter retained temporarily below for source-history context;
-		# modular exports return above and never emit declarations or unit callbacks.
-		move_turn_miniumum_threshold = 0.0001  # skip only true no-ops; keep gait micro-offsets
-		sleepperframe = 1.0 / fps
-		# conversion time:
-		# output a bos script
-		# simplify mini rots and mini moves
-		# the first frame can be ignored
-		keyframe_times = sorted(animframes.keys())
-		explodedpieces = []
-
-		filepath = bpy.data.filepath
-		logger.info(f'File path to write to : {filepath}')
-
-		INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
-
-		flags = get_anim_flags(self, context)
-		ISWALK = flags["ISWALK"]
-		ISDEATH = flags["ISDEATH"]
-		VARIABLESPEED = flags["VARIABLESPEED"]
-		FIRSTFRAMESTANCE = flags["FIRSTFRAMESTANCE"]
-		ALL_TRANSFORMS_FIRST = flags["ALL_TRANSFORMS_FIRST"]
-		VARIABLESCALE = flags["VARIABLESCALE"]
-		VARIABLEAMPLITUDE = flags["VARIABLEAMPLITUDE"]
-		ASSIMP = flags["ASSIMP"]
-		MOVE_SCALE = get_move_scale(context)
-
-		move_variable = '[%.6f]'
-		turn_variable = '<%.6f>'
-
-		if VARIABLESCALE:
-			move_variable = "((" + move_variable + " *MOVESCALE)/100)"
-
-		if VARIABLEAMPLITUDE:
-			move_variable = "((" + move_variable + " *animAmplitude)/100)"
-			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
-
-		#AXES = 'XZY'
-		BOSAXIS = ['x-axis', 'z-axis' if not ASSIMP else 'y-axis', 'y-axis' if not ASSIMP else 'z-axis']
-		blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [-1.0, -1.0, 1.0]}
-		if ASSIMP:
-			blender_to_bos_axis_multiplier = {'move': [1.0, 1.0, 1.0], 'turn': [1.0, 1.0, -1.0]} # ok Y axis is surely correct now, X looks ok too, Z too, but surely there isnt a swap here?
-
-
-		
-
-		#LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
-		#blender_to_bos_axis_multiplier = {'Move': [1.0, 1.0, 1.0], 'Turn': [-1.0, 1.0, 1.0]}
-
-
-		def MakeBOSLineString(turn_or_move, bonename, axisindex, targetposition, speed, variablespeed=True, indents=3,
-							  delta=0):
-			axisname = BOSAXIS[axisindex]
-			if turn_or_move == 'move':
-				targetposition = float(targetposition) * MOVE_SCALE
-				speed = float(speed) * MOVE_SCALE
-			targetposition = targetposition * blender_to_bos_axis_multiplier[turn_or_move][axisindex]
-			cmdline = '' + '\t' * indents
-			cmdline = cmdline + turn_or_move + ' '
-			cmdline = cmdline + piecenameprefix + bonename + ' to '
-			cmdline = cmdline + axisname + ' '
-			if turn_or_move == 'turn':
-				cmdline = cmdline + turn_variable % targetposition + ' '
-			else:
-				cmdline = cmdline + move_variable % targetposition + ' '
-			cmdline = cmdline + 'speed '
-			if turn_or_move == 'turn':
-				cmdline = cmdline + turn_variable % speed + ' '
-			else:
-				cmdline = cmdline + move_variable % speed + ' '
-			if variablespeed:
-				cmdline = cmdline + '/ animSpeed'
-			cmdline = cmdline + '; '
-			if delta != 0 and not OMITDELTAOUTPUT:
-				cmdline = cmdline + '//delta=%.2f'%delta
-			return cmdline
-
-		action_name = flags["ACTION"].name if flags["ACTION"] else "Action"
-		newfile_name = build_export_filepath(action_name, getattr(self, "export_suffix", ".txt"))
-		outf = open(newfile_name, 'w')
-		# Header attribution line removed by request
-		if VARIABLESCALE:
-			outf.write("#define MOVESCALE 100 //Higher values are bigger, 100 is default\n")
-		if VARIABLEAMPLITUDE:
-			outf.write("static-var animAmplitude; //Higher values are bigger, 100 is default\n")
-		if ISWALK and VARIABLESPEED:
-			outf.write(
-				"// this animation uses the static-var animFramesPerKeyframe which contains how many frames each keyframe takes\n")
-			outf.write("static-var animSpeed, maxSpeed, animFramesPerKeyframe, isMoving;\n#define SIGNAL_MOVE 1\n")
-		elif not ISDEATH:
-			outf.write("static-var bAnimate;\n")
-
-		animSpeed = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
-		animFPK = 4
-		if len(animSpeed) == 0:
-			logger.warning("MEGA WARNING: NO DETECTABLE FRAMES!")
-			return
-		else:
-			animFPK = float(sum(animSpeed)) / (len(keyframe_times) - 2)
-			if ISWALK and (animFPK - round(animFPK) > 0.00001):
-				warn = "//Animframes spacing is %f, THIS SHOULD BE AN INTEGER, SPACE YOUR KEYFRAMES EVENLY!\n" % animFPK
-				outf.write(warn)
-				logger.warning(warn)
-
-		stopwalking_maxspeed = {}  # dict of bos commands, with max velocity in it to define the stopwalking function
-		firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
-		if ISWALK:
-			outf.write("Walk() {\n\tset-signal-mask SIGNAL_MOVE;\n")
-		elif ISDEATH:
-			outf.write(
-				"//use call-script DeathAnim(); from Killed()\nDeathAnim() {\n\tsignal SIGNAL_MOVE;\n\tsignal SIGNAL_AIM1;\n\tcall-script StopWalking();\n\tturn aimy1 to y-axis <0> speed <120>;\n\tturn aimx1 to x-axis <0> speed <120>;\n")
-		else:
-			outf.write("// start-script Animate(); //from RestoreAfterDelay\n")
-			outf.write(
-				"Animate() {\n\tset-signal-mask SIGNAL_MOVE | SIGNAL_AIM1; //you might need this\n\tsleep 100*RAND(30,256);//sleep between 3 and 25.6 seconds\n\tbAnimate = TRUE;\n")
-
-		firststep = True
-		if not ISWALK:
-			firststep = False
-
-		arm_for_pose, _prefix = find_export_armature(context)
-		first_written_frame = True
-
-		for frame_index, frame_time in enumerate(keyframe_times):
-			if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
-				continue
-
-			thisframe = animframes[keyframe_times[frame_index]]
-			prevframe = animframes[keyframe_times[frame_index - 1]]
-
-			keyframe_delta = keyframe_times[frame_index] - keyframe_times[frame_index - 1]
-			if keyframe_delta == 0:
-				keyframe_delta = 1
-			sleeptime = sleepperframe * keyframe_delta
-			force_all = ALL_TRANSFORMS_FIRST and frame_index > 0 and first_written_frame
-			if force_all:
-				bpy.context.scene.frame_set(frame_time)
-				full_pose = collect_full_piece_transforms(arm_for_pose)
-				for bone_name, channels in full_pose.items():
-					if bone_name not in thisframe:
-						thisframe[bone_name] = {}
-					thisframe[bone_name].update(channels)
-
-			if frame_index > 0:
-				if firststep:
-					outf.write("\tif (isMoving) { //Frame:%i\n" % frame_time)
-				else:
-					if ISWALK:
-						outf.write("\t\tif (isMoving) { //Frame:%i\n" % frame_time)
-					elif ISDEATH:
-						outf.write("\t\tif (TRUE) { //Frame:%i\n" % frame_time)
-					else:
-						outf.write("\t\tif (bAnimate) { //Frame:%i\n" % frame_time)
-
-			for bone_name in sorted(thisframe.keys()):
-				bone_motions = thisframe[bone_name]
-				rotations_sum = 0
-
-				for axis, value in bone_motions.items():
-					# find previous value
-					# TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
-					# handle separately for idle anims, as they dont require accurate keyframe reinterpolation
-					sleeptime = sleepperframe * keyframe_delta
-					prevvalue = 0
-					prevframe = frame_index - 1
-					foundprev = False
-					for previous in range(frame_index - 1, -1, -1):
-						if bone_name in animframes[keyframe_times[previous]] and axis in \
-								animframes[keyframe_times[previous]][bone_name]:
-							prevvalue = animframes[keyframe_times[previous]][bone_name][axis]
-							foundprev = True
-							prevframe = previous
-							break
-					if not foundprev and frame_index > 0:
-						logger.warning(f'Failed to find previous position for bone { bone_name} axis {axis} frame { keyframe_times[frame_index]}')
-					else:
-						pass
-					# sleeptime = sleepperframe * (keyframe_times[i] - keyframe_times[prevframe])
-
-					axis_index = int(axis[-1])
-					# blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
-					if abs(value - prevvalue) < move_turn_miniumum_threshold and not force_all:
-						logger.info("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevvalue))
-						continue
-					else:
-						if ISDEATH:
-							if bone_name not in explodedpieces:
-								if axis.startswith('location') and abs(value - prevvalue) > 100:
-
-									def recurseexplodechildren(piece_name):
-										BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE|NOHEATCLOUD;\n\t\t\thide %s;\n' % (
-											piece_name, piece_name)
-										outf.write(BOS)
-										explodedpieces.append(piece_name)
-										for child in piecehierarchy[piece_name]:
-											recurseexplodechildren(child)
-
-									recurseexplodechildren(bone_name)
-									continue
-							else:  # this piece has already blown up, ignore it
-								continue
-
-						# bos_cmd = '\t\t\t%s %s to %s %s speed %s %s; //delta=%.2f '
-						turn_or_move = 'turn'
-						if axis.startswith('location'):  # Move
-							turn_or_move = 'move'
-						else:
-							if axis not in ['rot0', 'rot1', 'rot2']:
-								logger.warning(f'Found an axis name {axis} that is nonstandard for bos in piece {bone_name} at frame {frame_time}')
-								continue
-						stopwalking_cmd = '%s %s to %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
-
-						if FIRSTFRAMESTANCE and frame_index == 0:
-							firstframestance_positions[stopwalking_cmd] = value * \
-																		  blender_to_bos_axis_multiplier[turn_or_move][
-																			  axis_index]
-
-						maxvelocity = abs(value - prevvalue) / sleeptime
-						if stopwalking_cmd in stopwalking_maxspeed:
-							if maxvelocity > stopwalking_maxspeed[stopwalking_cmd]:
-								stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
-						else:
-							stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
-						rotations_sum += abs(value - prevvalue)
-						if bone_name[0:3] == 'PC_':
-							logger.info(f'Skipping fake bone PC_ {bone_name}')
-							continue
-						speed_delta = abs(value - prevvalue)
-						if force_all and speed_delta < 0.1:
-							speed_delta = max(abs(value), 0.1)
-						BOS = MakeBOSLineString(
-							turn_or_move,
-							bone_name,
-							axis_index,
-							value,
-							speed_delta * fps if VARIABLESPEED else speed_delta / sleeptime,
-							variablespeed=VARIABLESPEED,
-							indents=3,
-							delta=value - prevvalue
-						)
-
-						if rotations_sum > 130:
-							gwarn = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
-								frame_time, bone_name)
-							logger.warning(gwarn)
-							BOS += '//' + gwarn + '\n'
-
-						if not foundprev:
-							BOS += '//' + "Failed to find previous position for bone" + bone_name + 'axis' + axis
-
-						if frame_index > 0:
-							outf.write(BOS + '\n')
-
-			if frame_index > 0:
-				if force_all:
-					first_written_frame = False
-
-				if VARIABLESPEED:
-					outf.write('\t\tsleep ((33*animSpeed) -1);\n')
-				else:
-					outf.write('\t\tsleep %i;\n' % (33 * keyframe_delta - 1))
-
-				if firststep:
-					outf.write("\t}\n")
-					outf.write("\twhile(isMoving) {\n")
-					firststep = False
-				else:
-					outf.write('\t\t}\n')
-
-		if ISWALK:
-			outf.write('\t}\n')
-
-		outf.write('}\n')
-
-		if not ISDEATH:
-			if ISWALK:
-				outf.write(
-					'// Call this from StopMoving()!\nStopWalking() {\n\tanimSpeed = 10; // tune restore speed here, higher values are slower restore speeds\n')
-			else:
-				outf.write('// Call this from StopMoving()!\nStopAnimation() {\n')
-			for restore in sorted(stopwalking_maxspeed.keys()):
-				if FIRSTFRAMESTANCE:
-					stance_position = 0
-					if restore in firstframestance_positions:
-						stance_position = firstframestance_positions[restore]
-					else:
-						logger.warning("Stance key %s not found in %s" % (restore, firstframestance_positions))
-					if restore.startswith('turn'):
-						outf.write(
-							'\t' + restore + ' <%.6f> speed <%.6f> / animSpeed;\n' % (
-								stance_position, stopwalking_maxspeed[restore] * 10))
-					if restore.startswith('move'):
-						if VARIABLESCALE:
-							outf.write(
-								'\t' + restore + ' ([%.6f]*MOVESCALE)/100 speed (([%.6f]*MOVESCALE)/100) / animSpeed;\n' % (
-									stance_position * MOVE_SCALE, stopwalking_maxspeed[restore] * 10 * MOVE_SCALE))
-						else:
-							outf.write(
-								'\t' + restore + ' [%.6f] speed [%.6f] / animSpeed;\n' % (
-									stance_position * MOVE_SCALE, stopwalking_maxspeed[restore] * 10 * MOVE_SCALE))
-				else:
-					if restore.startswith('turn'):
-						outf.write(
-							'\t' + restore + ' <0> speed <%.6f> / animSpeed;\n' % (stopwalking_maxspeed[restore] * 10))
-					if restore.startswith('move'):
-						if VARIABLESCALE:
-							outf.write('\t' + restore + ' [0] speed [%.6f] / animSpeed;\n' % (
-									stopwalking_maxspeed[restore] * 10 * MOVE_SCALE))
-						else:
-							outf.write('\t' + restore + ' [0] speed (([%.6f]*MOVESCALE)/100) / animSpeed;\n' % (
-									stopwalking_maxspeed[restore] * 10 * MOVE_SCALE))
-
-			outf.write('}\n')
-
-		if ISWALK and VARIABLESPEED:
-			outf.write('// REMEMBER TO animspeed = %i in Create() !!\n' % animFPK)
-			outf.write('UnitSpeed(){\n')
-			outf.write('\tmaxSpeed = get MAX_SPEED; // this returns cob units per frame i think\n')
-			outf.write(
-				'\tanimFramesPerKeyframe = %i; //we need to calc the frames per keyframe value, from the known animtime\n' % animFPK)
-			outf.write('\tmaxSpeed = maxSpeed + (maxSpeed /(2*animFramesPerKeyframe)); // add fudge\n')
-			outf.write('\twhile(TRUE){\n')
-			outf.write('\t\tanimSpeed = (get CURRENT_SPEED);\n')
-			outf.write('\t\tif (animSpeed<1) animSpeed=1;\n')
-			outf.write('\t\tanimSpeed = (maxSpeed * %i) / animSpeed; \n' % animFPK)
-			outf.write(
-				'\t\t//get PRINT(maxSpeed, animFramesPerKeyframe, animSpeed); //how to print debug info from bos\n')
-			outf.write('\t\tif (animSpeed<%i) animSpeed=%i;\n' % (int(animFPK / 2), int(animFPK / 2)))
-			outf.write('\t\tif (animspeed>%i) animSpeed = %i;\n' % (animFPK * 2, animFPK * 2))
-			outf.write('\t\tsleep %i;\n' % (33 * animFPK - 1))
-			outf.write('\t}\n}\n')
-			outf.write('StartMoving(){\n\tsignal SIGNAL_MOVE;\n\tisMoving=TRUE;\n\tstart-script Walk();\n}\n')
-			outf.write('StopMoving(){\n\tsignal SIGNAL_MOVE;\n\tisMoving=FALSE;\n\tcall-script StopWalking();\n}\n')
-
-		outf.close()
-		logger.info(f'Done writing bos! ISWALK = {ISWALK} Varspeed = {VARIABLESPEED}')
-
 
 class SkeletorLUSMaker(SkeletorBOSMaker):
 	bl_idname = "sskele.createlus"
@@ -1788,10 +1317,6 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 		fps = float(getattr(context.scene.render, "fps", 30) or 30)
 		move_turn_miniumum_threshold = 0.0001  # skip only true no-ops; keep gait micro-offsets
 		sleepperframe = 1.0 / fps
-		# conversion time:
-		# output a bos script
-		# simplify mini rots and mini moves
-		# the first frame can be ignored
 		keyframe_times = sorted(animframes.keys())
 		explodedpieces = []
 
@@ -1853,7 +1378,6 @@ class SkeletorLUSMaker(SkeletorBOSMaker):
 		action_name = flags["ACTION"].name if flags["ACTION"] else "Action"
 		newfile_name = build_export_filepath(action_name, getattr(self, "export_suffix", ".lua"))
 		outf = open(newfile_name, 'w')
-		# Header attribution line removed by request
 		if VARIABLESCALE:
 			outf.write("local MOVESCALE = 100 -- Higher values are bigger, 100 is default\n")
 		if VARIABLEAMPLITUDE:
@@ -1904,8 +1428,6 @@ local function Walk()
 \tlocal speedMult, sleepTime = GetSpeedParams()
 """)
 		elif ISDEATH:
-			# TODO for death animations:
-			# turn values and speeds probably need to be converted to radians
 			outf.write("""
 -- use StartThread(DeathAnim) from Killed()
 local function DeathAnim() -- %s
@@ -1915,15 +1437,11 @@ local function DeathAnim() -- %s
 \tTurn(aimy1, y_axis, 0, %d)
 \tTurn(aimx1, x_axis, 0, %d)
 """ % (INFOSTRING, radians(120), radians(120)))
-		# Not-walk scripts
 		else:
 			outf.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
 			outf.write("""
 local function Animate() -- %s
 """ % INFOSTRING)
-		# \tSetSignalMask(SIGNAL_MOVE + SIGNAL_AIM1) -- you might need this
-		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
-
 		firststep = True
 		if not ISWALK:
 			firststep = False
@@ -1932,7 +1450,7 @@ local function Animate() -- %s
 		first_written_frame = True
 
 		for frame_index, frame_time in enumerate(keyframe_times):
-			if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
+			if frame_index == 0 and not FIRSTFRAMESTANCE:
 				continue
 
 			thisframe = animframes[keyframe_times[frame_index]]
@@ -1970,9 +1488,6 @@ local function Animate() -- %s
 					if not axis.startswith(('location', 'rot')):
 						logger.warning("Warning: Keyframe for something other than location or rotation")
 						continue
-					# find previous value
-					# TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
-					# handle separately for idle anims, as they dont require accurate keyframe reinterpolation
 					sleeptime = sleepperframe * keyframe_delta
 					prevvalue = 0
 					prevframe = frame_index - 1
@@ -1989,10 +1504,7 @@ local function Animate() -- %s
 							  keyframe_times[frame_index])
 					else:
 						pass
-					# sleeptime = sleepperframe * (keyframe_times[i] - keyframe_times[prevframe])
-
-					axis_index = int(axis[-1])	# last char, eg: rotation0 => 0
-					# blender_to_bos_axis_multiplier = [-1.0, 1.0, 1.0]  # for turns
+					axis_index = int(axis[-1])
 					if abs(value - prevvalue) < move_turn_miniumum_threshold and not force_all:
 						logger.info("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevvalue))
 						continue
@@ -2014,7 +1526,6 @@ local function Animate() -- %s
 							else:  # this piece has already blown up, ignore it
 								continue
 
-						# bos_cmd = '\t\t\t%s %s to %s %s speed %s %s; -- delta=%.2f '
 						turn_or_move = 'Turn'
 						if axis.startswith('location'):  # Move
 							turn_or_move = 'Move'
@@ -2033,7 +1544,6 @@ local function Animate() -- %s
 							stopwalking_maxspeed[stopwalking_cmd] = maxvelocity
 						rotations_sum += abs(value - prevvalue)
 
-						# "MakeBOSLineString" is an override, don't refactor / rename it
 						speed_delta = abs(value - prevvalue)
 						if force_all and speed_delta < 0.1:
 							speed_delta = max(abs(value), 0.1)
@@ -2159,7 +1669,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 	def tobos(self, context):
 		logger.info("MAKING LUS TWEEN, LIKE A BOSS!")
-		# Lazy init (safe across Blender versions – no custom Operator.__init__)
 		if not hasattr(self, "whichframe"):
 			self.whichframe = 0
 		scene = context.scene
@@ -2171,33 +1680,14 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if arma is None:
 			logger.error("ERROR: Armature not found! Quitting.")
 			return
-		# if 'Armature' not in context.scene.objects:
-		# 	print("ERROR: Armature not found! Quitting.")
-		# 	return
-		# arma = context.scene.objects['Armature']
 		if FullDebug:
 			logger.debug(f'whichframe: {self.whichframe}')
 		self.whichframe += 1
-		props = {"location": "move", "rotation_euler": "turn"}
 		bonesWithCurves = []
 		bonesInIkChains = []
-		pieceHierarchy = {}  # for each bone, list its children.
-		# things I know:
-		# curves contain the needed location data
-		# pose bones matrices contain the needed rotation data
-		# ignore all rots and pos's of iktargets
-		# remove .L and .R monikers
-
-		# required structure:
-		# a dict of keyframes indexed by their frame number
-		# animframes = {}  # {frame_number:{bone_name:{axis:value}}}
-		# the values of which is another dict, of piece names
-		# each piece name has a turn and a move op, with xzy coords
-
-		# We use this for the tween exporter, which uses a different system (ie. not all new keys add all bones in motion)
-		keysPerBone = {}  # {bone_name:[keyframe_idx:{keyframe_time, axisId, value, delta}]} || eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
-
-		# in each frame, each 'real piece' should have its position and location stored
+		pieceHierarchy = {}
+		# Tween export retains sparse, per-bone keys instead of baking every bone at every frame.
+		keysPerBone = {}
 		curves = get_action_fcurves(arma)
 		if curves:
 			if FullDebug:
@@ -2218,8 +1708,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					bone_name = bone_name[:-2]
 
 				cTarget = c.data_path.rpartition('.')[2]
-				# 'euler' in ctarget or 'quaternion' in ctarget or 'scale' in ctarget
-				#if FullDebug:
 				if 'euler' not in cTarget and 'location' not in cTarget:
 					if FullDebug:
 						logger.debug("Skipping: "+cTarget)
@@ -2230,20 +1718,17 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 				axis = str(c.array_index)
 
-				# axisId = cTarget + axis. Eg: "rotation_euler0", for x rotation
 				for i, k in enumerate(keyframes):
 					frame_time = int(k.co[0])
 					value = float(k.co[1])
-					# if abs(value)<0.1:
-					#    continue
 
-					if bone_name not in keysPerBone:     #initialize bone entry if new
+					if bone_name not in keysPerBone:
 						keysPerBone[bone_name] = {}
 
 					if frame_time not in keysPerBone[bone_name]:
 						keysPerBone[bone_name][frame_time] = {}
 					axisId = cTarget + axis
-					keyframeData = { 'value': value }  # 'keyframe_time': frame_time,
+					keyframeData = { 'value': value }
 
 					keysPerBone[bone_name][frame_time][axisId] = keyframeData.copy()
 
@@ -2251,19 +1736,16 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		SKINNING = get_anim_flags(self, context)["SKINNING"]
 
-		#### Goes through keysPerBone, get all bone.names and, from context.scene.objects[bone.name] get
-		#### its meshFromBone.animation_data, search *only* for "hide_viewport" channels
-		#### Assign that info to keysPerBone; <<== Not usable for Skinned animations! ==>
+		# Visibility curves are exported only for rigid piece objects, not skinned models.
 		if not SKINNING:
 			for bone_name in keysPerBone:
-				meshFromBone = context.scene.objects.get(bone_name)  # same name as the bone
+				meshFromBone = context.scene.objects.get(bone_name)
 				if meshFromBone is None:
 					continue
 				if meshFromBone.animation_data is None or meshFromBone.animation_data.action is None:
 					logger.info("skipping (no visibility anim): "+meshFromBone.name)
 					continue
 				curves = get_action_fcurves(meshFromBone)
-				# logger.info("Visibility Animdata: ", curves, meshFromBone.animation_data)
 				for c in curves:
 					keyframes = c.keyframe_points
 					cTarget = c.data_path.rpartition('.')[2]
@@ -2314,14 +1796,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		if FullDebug:
 			logger.info("\n\nGathering IK chains\n")
-			#
 			for bone in arma.pose.bones:
 				if 'iktarget' in bone.name:
 					continue
 				bone_name = bone.name
 				if 'IK' in bone.constraints and bone.constraints['IK'].mute == False:
 					chainLength = bone.constraints['IK'].chain_count
-					if chainLength == 0:  # this means that everything up until the root is in the chain
+					if chainLength == 0:
 						logger.info(f'{bone_name} has IK length {chainLength}')
 						p = bone
 						while p is not None:
@@ -2343,7 +1824,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		if FullDebug:
 			logger.debug("Gathering animdata")
 
-		#for frame_time in sorted(animframes.keys()):
 		for bone in arma.pose.bones:
 			if 'iktarget' in bone.name:
 				continue
@@ -2354,14 +1834,14 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			if bone_name not in keysPerBone:
 				continue
 
-			for frame_time in keysPerBone[bone_name]:    # sorted(keysPerBone[bone_name].keys()):
+			for frame_time in keysPerBone[bone_name]:
 				if FullDebug:
 					logger.debug("SETTING FRAMETIME", frame_time)
 				bpy.context.scene.frame_set(frame_time)
 
 				bone_matrix = bone.matrix.copy()
 
-				MYEULER = 'YXZ'  # 'ZXY'
+				MYEULER = 'YXZ'
 				current_bone = bone
 				parent_bone_matrix = bone.matrix.copy()
 				if current_bone.parent is not None:
@@ -2371,22 +1851,16 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 					bone_matrix = parent_bone_matrix @ bone_matrix
 					current_bone = current_bone.parent
 
-				rot = bone_matrix.to_euler(MYEULER)  # , parent_bone_matrix.to_euler(MYEULER) )
+				rot = bone_matrix.to_euler(MYEULER)
 				rotation_text = '%s X:%.1f Y:%.1f Z:%.1f' % (bone_name, degrees(rot.x), degrees(rot.y), degrees(rot.z))
 				if FullDebug:
 					logger.debug(rotation_text)
 
-				# if frame_time not in keysPerBone[bone_name]:
-				# 	keysPerBone[bone_name][frame_time] = {}
-
-				# rot0, rot1 and rot3 will store the original values in angles (rotation_euler0/1/2 in radians)
 				if bone_name not in bonesInIkChains:
 					for axis in range(3):
 						axisId = 'rot' + str(axis)
 						value = degrees(arma.pose.bones[bone.name].rotation_euler[axis])
 						keysPerBone[bone_name][frame_time][axisId] = { "value": value }
-						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(
-						# 	arma.pose.bones[bone.name].rotation_euler[axis])
 				else:
 					for axis, value in enumerate(rot[0:3]):
 						axisId = 'rot' + str(axis)
@@ -2394,7 +1868,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						if FullDebug:
 							logger.debug(f'adding{frame_time} {bone_name} rot {axis} {value}')
 						keysPerBone[bone_name][frame_time][axisId] = { "value": value }
-						# keysPerBone[bone_name][frame_time]['rot' + str(axis)] = degrees(value)
 
 		logger.info("\n\n\nKeyframes Per Bone: ", keysPerBone)
 		self.write_file(context=context, keysPerBone=keysPerBone, pieceHierarchy=pieceHierarchy, arma=arma)
@@ -2403,21 +1876,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			logger.debug("Bones with curves: ", bonesWithCurves)
 
 	def write_file(self, context, keysPerBone, pieceHierarchy, arma):
-		fps = 30.0
-		move_turn_minimum_threshold = 0.1  # moves/turns smaller than this will be straight up ignored
-		sleepPerFrame = 1.0 / fps
-		# conversion time:
-		# output a bos script
-		# simplify mini rots and mini moves
-		# the first frame can be ignored
-
-		# keyframe_times = sorted(keysPerBone.keys())
-		explodedpieces = []
-
 		filepath = bpy.data.filepath
 		logger.info(f'{filepath}')
-
-		INFOSTRING = "For %s Created by https://github.com/Beherith/Skeletor_S3O V(%s)" % (filepath, bl_info['version'])
 
 		flags = get_anim_flags(self, context)
 		ISWALK = flags["ISWALK"]
@@ -2430,18 +1890,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		SCENEFIRSTFRAME = context.scene.frame_start
 		SCENELASTFRAME = context.scene.frame_end
 
-		move_variable = '%.6f'
-		turn_variable = '%.6f'
 		floatFormat = '%.6f'
-
-		if VARIABLESCALE:
-			move_variable = "((" + move_variable + " *MOVESCALE)/100)"
-
-		if VARIABLEAMPLITUDE:
-			move_variable = "((" + move_variable + " *animAmplitude)/100)"
-			turn_variable = "((" + turn_variable + " *animAmplitude)/100)"
-
-		# LUSAXIS = ['x_axis', 'z_axis', 'y_axis']
 		LUSAXIS = ['x_axis', 'z_axis' if not ASSIMP else 'y_axis', 'y_axis' if not ASSIMP else 'z_axis']
 		blender_to_bos_axis_multiplier = {'move': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0], 'turn': [-1.0, 1.0, 1.0] if not ASSIMP else [1.0, 1.0, 1.0]}
 
@@ -2460,16 +1909,8 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			cmdLine = cmdLine + '[' + str(luaIdx) +']={cmd="' + cmdID + '", '
 			cmdLine = cmdLine + 'axis=' + axisName + ', targetValue='
 			cmdLine = cmdLine + floatFormat % targetValue + ', '
-			# if turnOrMove == 'turn':
-			# 	cmdLine = cmdLine + turn_variable % targetValue + ', '  # radians(targetValue)
-			# else:
-			# 	cmdLine = cmdLine + move_variable % targetValue + ', '
-
 			cmdLine = cmdLine + "firstFrame="+str(firstFrame)+", "
 			cmdLine = cmdLine + "lastFrame="+str(lastFrame)+","
-			## TODO: variableSpeed; probably multiply start/endFrame by speedMult and round it to Int
-			# if variableSpeed:
-			# 	cmdLine = cmdLine + '* speedMult'
 			cmdLine = cmdLine + '},'
 			if delta != 0 and not OMITDELTAOUTPUT:
 				cmdLine = cmdLine + ' -- delta=%.2f'%delta
@@ -2479,9 +1920,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 
 		def OutputPieceVariables(arma):
 			tabs = '\t' * 5
-			# arma = context.scene.objects['Armature']
 			outputText = ''
-			# for bone_name, keys_dic in bones.items():
 			for bone in arma.pose.bones:
 				bone_name = bone.name
 				piece_name = bone_name
@@ -2515,99 +1954,28 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		action_name = flags["ACTION"].name if flags["ACTION"] else "Action"
 		newfile_name = build_export_filepath(action_name, getattr(self, "export_suffix", "_tween.lua"))
 		outFile = open(newfile_name, 'w')
-		# Header attribution line removed by request
 		if VARIABLESCALE:
 			outFile.write("local MOVESCALE = 100 -- Higher values are bigger, 100 is default\n")
 		if VARIABLEAMPLITUDE:
 			outFile.write("local animAmplitude = 100 -- Higher values are bigger, 100 is default\n")
-		# TODO
-		# 		if ISWALK and VARIABLESPEED:
-		# 			outFile.write("local ANIM_FRAMES = %i\n"  % (keyframe_times[1] - keyframe_times[0]))
-		# 			outFile.write("local SIGNAL_MOVE = 1\n")
-		# 			outFile.write("""
-		# local walking = false -- prevent script.StartMoving from spamming threads if already walking
-		#
-		# local function GetSpeedParams()
-		# \tlocal attMod = (Spring.GetUnitRulesParam(unitID, "totalMoveSpeedChange") or 1)
-		# \tif attMod <= 0 then
-		# \t\treturn 0, 300
-		# \tend
-		# \tlocal sleepFrames = math.floor(ANIM_FRAMES / attMod + 0.5)
-		# \tif sleepFrames < 1 then
-		# \t\tsleepFrames = 1
-		# \tend
-		# \tlocal speedMod = 1 / sleepFrames
-		# \treturn speedMod, 33*sleepFrames
-		# end
-		# """)
 		elif ISWALK:
 			outFile.write("local walking")
 		elif not ISDEATH:
-			# outFile.write("local bAnimate\n")
 			pass
-
-		# TODO
-		# speedMult = [keyframe_times[i] - keyframe_times[i - 1] for i in range(2, len(keyframe_times))]
-		# animFPK = 4
-		# if len(speedMult) == 0:
-		# 	print("MEGA WARNING: NO DETECTABLE FRAMES!")
-		# 	return
-		# else:
-		# 	animFPK = float(sum(speedMult)) / (len(keyframe_times) - 2)
-		# 	if ISWALK and (animFPK - round(animFPK) > 0.00001):
-		# 		warn = "-- Animframes spacing is %f, THIS SHOULD BE AN INTEGER, SPACE YOUR KEYFRAMES EVENLY!\n" % animFPK
-		# 		outFile.write(warn)
-		# 		print(warn)
 
 		stopwalking_maxspeed = {}  # dict of commands, with max velocity in it to define the stopwalking function
 		firstframestance_positions = {}  # dict of bos commands, with the target of the piece as value
-		# 		if ISWALK:
-		# 			outFile.write("""
-		# local function Walk()
-		# \tSignal(SIGNAL_MOVE)
-		# \tSetSignalMask(SIGNAL_MOVE)
-		# \tlocal speedMult, sleepTime = GetSpeedParams()
-		# """)
-		# 		elif ISDEATH:
-		# 			# TODO for death animations:
-		# 			# turn values and speeds probably need to be converted to radians
-		# 			outFile.write("""
-		# -- use StartThread(DeathAnim) from Killed()
-		# local function DeathAnim() -- %s
-		# \tSignal(SIGNAL_MOVE)
-		# \tSignal(SIGNAL_AIM1)
-		# \tStartThread(StopWalking()
-		# \tTurn(aimy1, y_axis, 0, %d)
-		# \tTurn(aimx1, x_axis, 0, %d)
-		# """ % (INFOSTRING, radians(120), radians(120)))
-		# 		# Not-walk scripts
-		# 		else:
-		# 			outFile.write("-- Startthread(Animate) -- from RestoreAfterDelay\n")
-		# 			outFile.write("""
-		# local function Animate() -- %s
-		# """ % INFOSTRING)
-		# 		# \tSetSignalMask(SIGNAL_MOVE + SIGNAL_AIM1) -- you might need this
-		# 		# \tSleep(100*math.rand(30,256)) -- sleep between 3 and 25.6 seconds
-		#
-		# 		lastFrame = keyframe_times[-1]
-		# 		outFile.write("\tlocal FEF = "+str(lastFrame)+"\n")
-		#
-		# 		firstStep = True
-		# 		if not ISWALK:
-		# 			firstStep = False
 
-		# keysPerBone = {}   #  {bone_name:[keyframe_idx:{keyframeTime, axisId, value, delta}]} eg. keysPerBone[bone_name][keyframe_idx] = keyframeData
-
-		markers = []		 #	Just a vector with frames
-		markerNames = {}	 #	{ frame:name, ... }
-		animNames = []		 #	Final list of animation names (since they won't always be marker-names)
+		markers = []
+		markerNames = {}
+		animNames = []
 		for m in context.scene.timeline_markers:
 			markers.append(m.frame)
 			markerNames[m.frame] = m.name
 		markers.sort()
 
-		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:   # Minor hack so we always have at least one range
-			markers.append(SCENELASTFRAME)                      # also to add the last scene frame as a marker
+		if len(markers) == 0 or markers[-1] < SCENELASTFRAME:
+			markers.append(SCENELASTFRAME)
 			markerNames[SCENELASTFRAME] = "anim"
 		logger.info("\n\n\n\nMarkers' frames:\n")
 		logger.info(f'{markers}')
@@ -2615,46 +1983,44 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 		RANGESTARTFRAME = SCENEFIRSTFRAME
 		RANGELASTFRAME = SCENELASTFRAME
 
-		# Creates the piece variables, eg: local left_arm1 = piece 'left_arm1'
 		outFile.write(OutputPieceVariables(arma))
 
-		animID = 0		# anim1, anim2, etc
+		animID = 0
 
 		outFile.write("-- #=#=# Animations: \n\n")
 		for i in range(len(markers)):
-			if markers[i] == SCENEFIRSTFRAME:			# Skips a marker coincident with the first scene frame
+			if markers[i] == SCENEFIRSTFRAME:
 				continue
 			RANGELASTFRAME = markers[i]
-			if RANGELASTFRAME > SCENELASTFRAME:			# Must respect the final scene frame
+			if RANGELASTFRAME > SCENELASTFRAME:
 				break
-			if RANGELASTFRAME < SCENEFIRSTFRAME:		# Respect the first scene frame
+			if RANGELASTFRAME < SCENEFIRSTFRAME:
 				continue
 
 			logger.info("\n\n\nMarker Range: " + str(RANGESTARTFRAME) + " to " + str(RANGELASTFRAME))
-			markerName = "anim"+str(animID+1)			# Let's do anim1..n to match lua's indexing
+			markerName = "anim"+str(animID+1)
 			if markerNames[RANGELASTFRAME] is not None:
 				markerName = markerNames[RANGELASTFRAME]
 			animNames.append(markerName)
 			outFile.write("local function "+markerName+"()\n")
 			animID += 1
 
-			#### ACTUAL TWEEN EXPORT
 			outFile.write("\tinitTween({veryLastFrame="+str(RANGELASTFRAME - RANGESTARTFRAME)+",\n")
 			for bone_name, keys_dic in keysPerBone.items():
-				if len(keys_dic.items()) == 0:      # skip bones with no keyframes
+				if len(keys_dic.items()) == 0:
 					continue
 				keys_dic = dict(sorted(keys_dic.items()))
 				BONEHEADERLINE = "\t\t\t\t[" + bone_name + "]={\n"
 				if FullDebug:
 					logger.info(f'\n\nBone: { bone_name} \nKeys_dic:\n {keys_dic}')
-				keys_list = list(keys_dic.items())  # Gets a list with the tuples of the dictionary
-				keyframe_idx = -1   # this is for every keyframe
-				luaIdx = 1          # this is for actually valid/exported keyframes
+				keys_list = list(keys_dic.items())
+				keyframe_idx = -1
+				luaIdx = 1
 				for keyframe_time, keyframeData in keys_dic.items():
-					keyframe_idx += 1   # Starts from idx=0
-					if not (keyframe_time <= RANGELASTFRAME):          # Must respect the final scene frame
+					keyframe_idx += 1
+					if not (keyframe_time <= RANGELASTFRAME):
 						break
-					if keyframe_time < RANGESTARTFRAME:                # Respect the first scene frame
+					if keyframe_time < RANGESTARTFRAME:
 						continue
 					# "hide_viewport" mesh key support; only one entry allowed per bone/frame
 					if "hide_viewport" in keyframeData:
@@ -2675,28 +2041,25 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							outFile.write(BONEHEADERLINE)
 						outFile.write(BOS + '\n')
 						luaIdx += 1
-					if keyframe_idx >= len(keys_dic)-1:               # Only check tweens up to the previous to last key
-						break  # continue
+					if keyframe_idx >= len(keys_dic)-1:
+						break
 
 					for axisId, data in keyframeData.items():
-						# axisId = keyframeData["axisId"]
 						value = data["value"]
 						delta = 0
 						nextValue = value
 						cmdID = 'turn' if 'rotation' in axisId else 'move'
 						if 'quaternion' in axisId:
 							continue
-						if not 'location' in axisId and not 'rotation' in axisId:   # skipping "rot0/1/2" as well
+						if not 'location' in axisId and not 'rotation' in axisId:
 							continue
-						# Let's go through all next keys and try to find a match for this key type
 						foundNextKey = False
 						nextKeyframeTime = keyframe_time
-						for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):     # range's 2nd param is exclusive
-							nextKeyframeData = keys_list[nextIdx][1]    # Gets the value of the next item ([0]=key)
-							# # eg: {'rotation_euler0': {'value': 1.5467493534088135}, ... }
+						for nextIdx in range(keyframe_idx+1, len(keys_dic), 1):
+							nextKeyframeData = keys_list[nextIdx][1]
 							if not axisId in nextKeyframeData.keys():
 								continue
-							nextKeyframeTime = keys_list[nextIdx][0]    # Gets the key of the next item (== keyframe_number)
+							nextKeyframeTime = keys_list[nextIdx][0]
 							if nextKeyframeTime > RANGELASTFRAME:
 								break
 							nextValue = nextKeyframeData[axisId]["value"]
@@ -2709,14 +2072,13 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 							keysPerBone[bone_name][keyframe_time][axisId] = { "value": value, "nextValue": nextValue, "turn_or_move": cmdID, "delta": delta }
 							break
 
-						if not foundNextKey:     # and i > 0:
+						if not foundNextKey:
 							if FullDebug:
 								logger.debug(f'Warning: Failed to find next key value for bone: {bone_name} axis: {axisId} frame {keyframe_time}')
 						else:
 							if delta < 0.01:
 								continue
-							#tweenCount += 1
-							if luaIdx == 1:     #  Header line is only written before the 1st tween
+							if luaIdx == 1:
 								outFile.write(BONEHEADERLINE)
 							axisIndex = int(axisId[-1])
 							BOS = MakeLusTweenLineString(
@@ -2728,7 +2090,7 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 								(nextKeyframeTime - RANGESTARTFRAME) if (nextKeyframeTime <= RANGELASTFRAME) \
 																	else (RANGELASTFRAME - RANGELASTFRAME), #lastFrame
 								variableSpeed=VARIABLESPEED,
-								indents=7,  # TODO: if ISWALK and not firstStep else 1,
+								indents=7,
 								delta=delta,
 								luaIdx=luaIdx,
 							)
@@ -2740,206 +2102,12 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 								logger.info(gWarning)
 								BOS += '-- ' + gWarning + '\n'
 
-							if not foundNextKey:
-								BOS += '-- ' + "Failed to find next value for bone " + bone_name + ', axis ' + axisId
-
-							# if frame_index > 0:
 							outFile.write(BOS + '\n')
-				if luaIdx > 1:      # Write bone's trailer line
+				if luaIdx > 1:
 					outFile.write('\t\t\t\t\t\t\t},\n')
 			outFile.write('\t\t\t})\n')
 			outFile.write("end\n")
 			RANGESTARTFRAME = RANGELASTFRAME
-
-
-		# for frame_index, frame_time in enumerate(keyframe_times):
-		# 	if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
-		# 		continue
-		# 	thisFrame = keysPerBone[keyframe_times[frame_index]]
-		# 	for bone_name in sorted(thisFrame.keys()):
-		# 		bone_motions = thisFrame[bone_name]
-		# 		for axisId, value in bone_motions.items():
-		# 			if not axisId.startswith(('location', 'rot')):
-		# 				# print("Warning: Keyframe for something other than location or rotation")
-		# 				continue
-		# 			prevFrame = frame_index - 1
-		# 			foundPrev = False
-		# 			for previous in range(prevFrame, -1, -1):
-		# 				previousAnimFrame = keysPerBone[keyframe_times[previous]]
-		# 				previousBoneAnim = previousAnimFrame[bone_name]
-		# 				if bone_name in previousAnimFrame and axisId in previousBoneAnim:
-		# 					prevValue = previousBoneAnim[axisId]
-		# 					delta = abs(prevValue - value)
-		# 			if previous == 0 or delta > move_turn_minimum_threshold:
-		# 				foundPrev = True
-		# 				prevFrame = previous
-		# 				break
-		# 			# axis_index = int(axisId[-1])
-		# 			if abs(value - prevValue) < move_turn_minimum_threshold:  # 0.1 by default
-		# 				print("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axisId, value - prevValue))
-		# 				continue
-		# 			turn_or_move = 'turn'
-		# 			if axisId.startswith('location'):  # Move
-		# 				turn_or_move = 'move'
-		# 			keysPerBone[bone_name][frame_time][axis_index] = { value: value, turn_or_move: turn_or_move, delta:delta }  # nextKeyframeTime TODO
-		# 			# TODO: Fix. Should be easy to know a bone's nextKeyframe time from this one
-
-		# Goal: 			BOS = MakeLusTweenLineString(
-		# 						turn_or_move,
-		# 						bone_name,
-		# 						axis_index,
-		# 						value,
-		# 						#abs(value - prevValue) * fps if VARIABLESPEED else maxVelocity,
-		# 						frame_time, # firstFrame
-		# 						lastFrame, #lastFrame
-		# 						variableSpeed=VARIABLESPEED,
-		# 						indents=2 if ISWALK and not firstStep else 1,
-		# 						delta=value - prevValue
-		# 					)
-
-		# # ===================
-
-		# for frame_index, frame_time in enumerate(keyframe_times):
-		# 	# if frame_index == 0 and not FIRSTFRAMESTANCE:  # skip first piece
-		# 	# 	continue
-		#
-		# 	thisFrame = keysPerBone[keyframe_times[frame_index]]
-		# 	#prevFrame = animframes[keyframe_times[frame_index - 1]]
-		# 	#next_keyframe_time = animframes[keyframe_times[frame_index + 1]] if frame_index + 1 < len(keyframe_times) else thisFrame
-		#
-		# 	keyframe_delta = keyframe_times[frame_index] - keyframe_times[frame_index - 1]
-		# 	sleepTime = sleepPerFrame * keyframe_delta
-		#
-		# 	if frame_index > 0:
-		# 		if firstStep:
-		# 			outFile.write("\n\t-- Frame: %i (first step)\n" % frame_time)
-		# 		else:
-		# 			if ISWALK:
-		# 				outFile.write("\t\t-- Frame: %i\n" % frame_time)
-		# 			elif ISDEATH:
-		# 				outFile.write("\t\t-- Frame: %i\n" % frame_time)
-		# 			else:
-		# 				outFile.write("\t-- Frame: %i\n" % frame_time)
-		#
-		# 	for bone_name in sorted(thisFrame.keys()):
-		# 		bone_motions = thisFrame[bone_name]
-		# 		rotations_sum = 0
-		#
-		# 		for axis, value in bone_motions.items():
-		# 			if not axis.startswith(('location', 'rot')):
-		# 				print("Warning: Keyframe for something other than location or rotation")
-		# 				continue
-		# 			# find previous value
-		# 			# TODO: fix missing keyframes for individual anims and interpolate from last known keyframe for curve!
-		# 			# handle separately for idle anims, as they dont require accurate keyframe reinterpolation
-		# 			sleepTime = sleepPerFrame * keyframe_delta
-		# 			prevValue = 0
-		# 			prevFrame = frame_index - 1
-		# 			foundPrev = False
-		# 			nextValue = 0
-		# 			nextKeyFrame = frame_index
-		# 			foundNext = False
-		# 			for previous in range(prevFrame, -1, -1):
-		# 				previousAnimFrame = keysPerBone[keyframe_times[previous]]
-		# 				previousBoneAnim = previousAnimFrame[bone_name]
-		# 				if bone_name in previousAnimFrame and axis in previousBoneAnim:
-		# 					prevValue = previousBoneAnim[axis]
-		# 					delta = abs(prevValue - value)
-		# 					if previous == 0 or delta > move_turn_minimum_threshold:
-		# 						foundPrev = True
-		# 						prevFrame = previous
-		# 						break
-		# 			if not foundPrev and frame_index > 0:
-		# 				print("Warning: Failed to find previous position for bone", bone_name, 'axis', axis, 'frame',
-		# 					  keyframe_times[frame_index])
-		# 			else:
-		# 				pass
-		# 			# sleepTime = sleepPerFrame * (keyframe_times[i] - keyframe_times[prevframe])
-		#
-		# 			axis_index = int(axis[-1])
-		# 			# blender_to_bos_axis_multiplier = [-1.0, -1.0, 1.0]  # for turns
-		# 			if abs(value - prevValue) < move_turn_minimum_threshold:  # 0.1 by default
-		# 				print("%i Ignored %s %s of %.6f delta" % (frame_time, bone_name, axis, value - prevValue))
-		# 				continue
-		#
-		# 			if ISDEATH:
-		# 				if bone_name not in explodedpieces:
-		# 					if axis.startswith('location') and abs(value - prevValue) > 100:
-		#
-		# 						def recurseExplodeChildren(piece_name):
-		# 							BOS = '\t\t\texplode %s type FALL|SMOKE|FIRE|NOHEATCLOUD;\n\t\t\thide %s;\n' % (
-		# 								piece_name, piece_name)
-		# 							outFile.write(BOS)
-		# 							explodedpieces.append(piece_name)
-		# 							for child in pieceHierarchy[piece_name]:
-		# 								recurseExplodeChildren(child)
-		#
-		# 						recurseExplodeChildren(bone_name)
-		# 						continue
-		# 				else:  # this piece has already blown up, ignore it
-		# 					continue
-		#
-		# 			# bos_cmd = '\t\t\t%s %s to %s %s speed %s %s; -- delta=%.2f '
-		# 			turn_or_move = 'turn'
-		# 			if axis.startswith('location'):  # Move
-		# 				turn_or_move = 'move'
-		# 			stopWalking_cmd = '%s(%s, %s' % (turn_or_move, bone_name, BOSAXIS[axis_index])
-		#
-		# 			if FIRSTFRAMESTANCE and frame_index == 0:
-		# 				firstframestance_positions[stopWalking_cmd] = value * \
-		# 															  blender_to_bos_axis_multiplier[turn_or_move][
-		# 																  axis_index]
-		#
-		# 			maxVelocity = abs(value - prevValue) / sleepTime
-		# 			if stopWalking_cmd in stopwalking_maxspeed:
-		# 				if maxVelocity > stopwalking_maxspeed[stopWalking_cmd]:
-		# 					stopwalking_maxspeed[stopWalking_cmd] = maxVelocity
-		# 			else:
-		# 				stopwalking_maxspeed[stopWalking_cmd] = maxVelocity
-		# 			rotations_sum += abs(value - prevValue)
-		#
-		# 			BOS = MakeLusTweenLineString(
-		# 				turn_or_move,
-		# 				bone_name,
-		# 				axis_index,
-		# 				value,
-		# 				#abs(value - prevValue) * fps if VARIABLESPEED else maxVelocity,
-		# 				frame_time, # firstFrame
-		# 				lastFrame, #lastFrame
-		# 				variableSpeed=VARIABLESPEED,
-		# 				indents=2 if ISWALK and not firstStep else 1,
-		# 				delta=value - prevValue
-		# 			)
-		#
-		# 			if rotations_sum > 130:
-		# 				gWarning = "WARNING: possible gimbal lock issue detected in frame %i bone %s" % (
-		# 					frame_time, bone_name)
-		# 				print(gWarning)
-		# 				BOS += '-- ' + gWarning + '\n'
-		#
-		# 			if not foundPrev:
-		# 				BOS += '-- ' + "Failed to find previous position for bone" + bone_name + 'axis' + axis
-		#
-		# 			if frame_index > 0:
-		# 				outFile.write(BOS + '\n')
-
-			# TODO: Not sure if needed for tweens
-			# if frame_index > 0:
-			#
-			# 	if VARIABLESPEED:
-			# 		indent = '\t' if firstStep else '\t\t'
-			# 		outFile.write(indent + 'Sleep(sleepTime)\n')
-			# 	else:
-			# 		outFile.write('\tSleep(%i)\n' % (33 * keyframe_delta - 1))
-			#
-			# 	if firstStep:
-			# 		outFile.write("\n\twhile true do\n")
-			# 		outFile.write("\t\tspeedMult, sleepTime = GetSpeedParams()\n")
-			# 		firstStep = False
-
-		# TODO / check:
-		# if ISWALK:
-		# 	outFile.write('\tend\n')
 
 		animsLine = "\nlocal Animations = {"
 		for i in range(len(animNames)):
@@ -2947,9 +2115,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			animsLine = animsLine + animName + " = " + animName + ", "
 		animsLine += "}\n\nreturn Animations\n"
 		outFile.write(animsLine)
-
-		# Animations = {openstd = openstd, closestd = closestd, morphup = morphup, openadv = openadv, closeadv = closeadv}
-		# return Animations
 
 		if not ISDEATH:
 			suffix = ' * speedMult)\n' if VARIABLESPEED else ')\n'
@@ -2965,7 +2130,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 			else:
 				if VARIABLESPEED:
 					outFile.write('-- Call this from StopMoving()!\n')
-				# outFile.write('local function StopAnimation()\n')		# Temporarily disabled
 			for restore in sorted(stopwalking_maxspeed.keys()):
 				if FIRSTFRAMESTANCE:
 					stance_position = 0
@@ -2997,8 +2161,6 @@ class SkeletorLUSTweenMaker(SkeletorBOSMaker):
 						else:
 							outFile.write('\t' + restore + ', 0, %.6f' % (
 									stopwalking_maxspeed[restore] * 10) + suffix)
-
-			# outFile.write('end\n')
 
 		if ISWALK and VARIABLESPEED:
 			outFile.write("""
@@ -3073,7 +2235,6 @@ def unregister():
 		for cls in reversed(REGISTER_CLASSES):
 			_safe_unregister_class(cls)
 	finally:
-		# To close the logger and remove all handlers
 		for handler in logger.handlers[:]:  # Make a copy of the list to avoid modification during iteration
 			logger.removeHandler(handler)
 
