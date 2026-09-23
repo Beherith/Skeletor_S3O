@@ -4,8 +4,9 @@
 
 [[https://github.com/Beherith/Skeletor_S3O]{.underline}](https://github.com/Beherith/Skeletor_S3O)
 
-Table of contents:![](images/media/image6.gif){width="2.34375in"
-height="2.34375in"}
+Table of contents:
+
+![](images/media/image6.gif)
 
 [[Requirements]{.underline}](#requirements)
 
@@ -104,7 +105,7 @@ Use the current control names quoted in the text: the panel is called
 - Make note of the max velocity of your unit (elmos/frame). You will
   need to know this to ensure that feet move in sync with the ground.
 
-![](images/media/image7.png){width="6.5in" height="5.520833333333333in"}
+![](images/media/image7.png)
 
 # Skeleton and Inverse Kinematics
 
@@ -127,8 +128,7 @@ the active collection. SuperSkeletor finds the S3O root and pieces in that
 collection. Before creating a skeleton, apply the model's rotation and scale
 if they have not already been applied.
 
-![](images/media/image22.png){width="3.4479166666666665in"
-height="1.6666666666666667in"}
+![](images/media/image22.png)
 
 Open the 3D View side panel (`N`) and select the **SuperSkeletor** tab. In
 the **Skeleton** section, click **Create Skeleton**. If you want automatic
@@ -136,8 +136,7 @@ IK controllers, enable **Add IK targets to chains** first: it is disabled by
 default. **IK targets at leafs** selects whether the target is placed on a
 leaf or one branch above it.
 
-![](images/media/image1.png){width="6.5in"
-height="3.2083333333333335in"}
+![](images/media/image1.png)
 
 ## Checking the created bones/inverse kinematics
 
@@ -150,8 +149,7 @@ Basic Bones and rigging:
 Basic inverse kinematics:
 [[https://www.youtube.com/watch?v=gH5uATTTYB4]{.underline}](https://www.youtube.com/watch?v=gH5uATTTYB4)
 
-![](images/media/image24.png){width="4.302083333333333in"
-height="4.458333333333333in"}
+![](images/media/image24.png)
 
 Note that we will not use inverse kinematics poles in the animations,
 instead I stiffen the Z axis joints, as poles are more problematic to
@@ -164,7 +162,7 @@ You can disable or edit these in Pose Mode.
 You can tune the chain lengths and targets here. **Setting chain lengths
 to zero means all pieces up to root will be in IK.**
 
-## ![](images/media/image19.png){width="3.3854166666666665in" height="4.1875in"}
+![](images/media/image19.png)
 
 ## Stiffening joints
 
@@ -176,12 +174,10 @@ Stiffness.
 everywhere is by setting Bone Constraints -\> IK -\> Rotation checkbox.
 THIS IS THE ABSOLUTE EASIEST AND BEST METHOD TO DO ANIMATIONS**
 
-![](images/media/image28.png){width="4.197916666666667in"
-height="4.114583333333333in"}
+![](images/media/image28.png)
 
 You can also show/hide bone names on the skeleton:
-![](images/media/image4.png){width="2.4375in"
-height="5.208333333333333in"}
+![](images/media/image4.png)
 
 # Choosing Actions to export
 
@@ -212,8 +208,7 @@ Set Blender to interpolate linear for walk scripts in
 Edit-\>Preferences. For death and idle you might want to use some other
 to export a high-detail anim.
 
-![](images/media/image27.png){width="6.5in"
-height="3.7916666666666665in"}
+![](images/media/image27.png)
 
 ## Walk Animations
 
@@ -226,8 +221,7 @@ smaller/faster units you will want less.
 Set Blender's render to **30 FPS**, as Recoil animations run at that
 rate.
 
-![](images/media/image20.png){width="4.401042213473316in"
-height="3.6690791776027996in"}
+![](images/media/image20.png)
 
 You want to **space the keyframes evenly**, to allow for sane speeding
 up and slowing down animation when the unit isn't traveling at
@@ -245,8 +239,7 @@ G + y, G + z every time you move a piece. Another tip is to use the side
 view (NUM3) when animating legs so that you can precisely see the ground
 level and all default transformations will be within ZY plane.
 
-![](images/media/image25.png){width="4.780859580052494in"
-height="2.425955818022747in"}
+![](images/media/image25.png)
 
 ## Example Walk Animation
 
@@ -260,17 +253,15 @@ traverse forward 24\*1.61 elmos in a cycle.
 
 [[https://sites.google.com/site/disasterbot0101/game-design/12\-\--animated-walk-cycle\-\--50pts]{.underline}](https://sites.google.com/site/disasterbot0101/game-design/12---animated-walk-cycle---50pts)
 
-![](images/media/image21.png){width="6.5in" height="2.0in"}
+![](images/media/image21.png)
 
-![](images/media/image11.png){width="6.5in"
-height="1.7638888888888888in"}
+![](images/media/image11.png)
 
 [[https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo]{.underline}](https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo)
 
 I recommend using the Dope sheet in blender to do your animations:
 
-![](images/media/image23.png){width="6.5in"
-height="2.861111111111111in"}
+![](images/media/image23.png)
 
 The first keyframe at pos 1 should be the default idle position of the
 unit, so the first step is animated nicely. **You can pose your unit on
@@ -308,17 +299,14 @@ Shift+Space starts and stops the animation
 Start by setting fps to 30, having the timeline and dope sheets open,
 kind of like so:
 
-![](images/media/image18.png){width="5.869792213473316in"
-height="3.5463320209973754in"}
+![](images/media/image18.png)
 
 Turn on recording on the timeline, and set your animation loop times for
 easy debugging
 
-![](images/media/image14.png){width="6.5in"
-height="0.5555555555555556in"}
+![](images/media/image14.png)
 
-![](images/media/image10.png){width="3.8020833333333335in"
-height="3.8854166666666665in"}
+![](images/media/image10.png)
 
 Start with the pelvis bobbing up and down, and rotating it left and
 right, and maybe even side to side.
@@ -337,21 +325,21 @@ sheet, select all of the keyframes in the walk cycle belonging to that
 bone on the dope sheet (iktarget.l_foot.L marked yellow here), and
 ctrl+c to copy them.
 
-![](images/media/image3.png){width="6.5in"
-height="0.7638888888888888in"}
+![](images/media/image3.png)
 
 Now to copy them 180\* out of phase and X reversed to the other
 iktarget.r_foot.R, put the timeline to the point where you want the copy
 to start (30 in this case), select the iktarget.r_foot.R target bone,
 and press Ctrl+Shift+V to paste it mirrored:
 
-![](images/media/image26.png){width="6.5in"
-height="0.6111111111111112in"}
+![](images/media/image26.png)
 
 Select the second half of the keyframes of this bone, and copy-paste
 them to the first half of the animation.
 
-## Idle animations![](images/media/image13.png){width="2.3541666666666665in" height="3.0729166666666665in"}
+## Idle animations
+
+![](images/media/image13.png)
 
 These do not have to have keyframes placed evenly. Disable **Is Walk Script**
 for the Action. Walk-only speed options are ignored for idle and death
@@ -374,18 +362,18 @@ It is recommended to start the death animation from the same power
 stance (or neutral) pose that's in the walk animation file. Put the
 first actual death keyframe about 10-15 frames from the neutral stance,
 to give some time so that all animated pieces can achieve that position.
-![](images/media/image2.png){width="4.385470253718285in"
-height="1.4322922134733158in"}
+![](images/media/image2.png)
 
-### Exporting death animations and wrecks![](images/media/image15.png){width="2.3122462817147857in" height="4.984375546806649in"}
+### Exporting death animations and wrecks
+
+![](images/media/image15.png)
 
 To export a wreck model, select all non-exploded off meshes export as
 OBJ (using the export settings in the image to the right) , then convert
 to s3o with obj2s3o available from **or** by using Upspring, but then
 remember to **left-right flip the model**, by scale X=-1, apply.
 
-![](images/media/image5.png){width="3.78125in"
-height="4.020833333333333in"}
+![](images/media/image5.png)
 
 Checklist: Unit_dead.s3o
 
@@ -413,7 +401,9 @@ neutral during the death animation.
 Note that a gadget must be added to your game that prevents dying units
 from moving and from being selected.
 
-# Avoiding Gimbal Lock![](images/media/image8.png){width="3.7203412073490814in" height="4.671875546806649in"}
+# Avoiding Gimbal Lock
+
+![](images/media/image8.png)
 
 Sometimes, especially due to the use of IK targets, when bones are
 rotated \~90 degrees along their major axis, further rotations can be
@@ -433,8 +423,9 @@ Luckily, by clicking the diamond next to the stiffness markers, you can
 also animate the stiffness properties of a bone. Thus you can set the
 desired stiffness to reduce gimbal lock on one frame, and then set it
 back to normal for the next and previous
-frames!![](images/media/image12.png){width="1.9791666666666667in"
-height="1.1770833333333333in"}
+frames!!
+
+![](images/media/image12.png)
 
 # Exporting actions
 
