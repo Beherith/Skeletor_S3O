@@ -2,3 +2,6 @@
 .idea/workspace.xml
 *.xml
 .idea/Skeletor_S3O.iml
+
+__pycache__/
+*.py[cod]
