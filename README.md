@@ -1,65 +1,56 @@
-# Usage Guide:
-READ THE TUTORIAL / DOCUMENTATION HERE: [Skeletor User Documentation](Skeletor_User_Documentation.md)
+# SuperSkeletor for S3O
 
-Video Tutorial:
+SuperSkeletor creates a Blender armature for an S3O-style piece hierarchy and
+exports Blender Actions as BOS includes, Lua Unit Scripts (LUS), or LUS Tween
+files for SpringRTS, Recoil, and Beyond All Reason.
 
-https://www.youtube.com/watch?v=DaMLNfOR6KU
+For the complete rigging, animation, and export guide, see
+[Skeletor User Documentation](Skeletor_User_Documentation.md). The legacy
+`skeletorscript.py` exporter is not the add-on documented here.
 
-# Skeletor_S3O
-A blender script that automatically generates a skeleton for an s3o imported model for SpringRTS animation
+## Quick start
 
-Usage:
+1. Enable **SuperSkeletor** in Blender's Add-ons preferences. If installing
+   from source, keep `SuperSkeletor.py` and `bos_animation.py` together.
+   The current add-on metadata targets Blender 5.1; the code also contains a
+   compatibility path for legacy Actions.
+2. Import an S3O model with `s3o_import.py`, if needed. Make the collection
+   containing the complete piece hierarchy active in the Outliner, then apply
+   the model's rotation and scale.
+3. In the 3D View side panel (`N`), open the **SuperSkeletor** tab and click
+   **Create Skeleton**. Enable **Add IK targets to chains** first if you want
+   automatic IK controllers; it is disabled by default.
+4. Create one or more Blender Actions. Under **Anim Exports**, click **New**,
+   choose an Action, and configure its per-Action options. An Action can occur
+   only once in the export list.
+5. Choose **Create BOS Includes (.h)**, **Create LUS**, or **Create LUS
+   Tween**. One file is written for each selected Action, beside the saved
+   blend file by default or in the configured export subfolder.
 
-1. Register the script with any version of blender from 2.80 up to 4.3 LTS
+For an overview of the end-to-end workflow, start with this
+[video tutorial](https://www.youtube.com/watch?v=DaMLNfOR6KU).
 
-2. Select the collection where the root piece (pelvis/base) of the model is. Make sure it's within a collection.
+## Export formats
 
-3. Hit Tab, type "Apply Rotation", and select Object > Apply > Rotation & Scale
+| Export | Output | Notes |
+| --- | --- | --- |
+| BOS | `[blend]_[action].h` | Include-ready header; requires an effective Blender frame rate of exactly 30 FPS. |
+| LUS | `[blend]_[action].lua` | Lua Unit Script export. |
+| LUS Tween | `[blend]_[action]_tween.lua` | SpringTweener-style tween export. |
 
-4. Press the "Create Skeleton" button
+Action names are converted to safe BOS identifiers and filenames. Invalid
+characters become underscores, and a leading digit receives an underscore.
 
-5. You can now go into Pose mode and flail the appendages around. 
+## BOS includes
 
-6. If you keep enabled "Add IK targets to chains", the addon will setup up inverse kinematics automagically for you, so you can rotate chains from a controller at its tip. If that fails for some reason, I recommend watching this video, in 5 minutes it will explain things better than I ever could:
+BOS exports are include-ready headers, not the old `bos_export.txt` output.
+The generated functions and configuration macros are namespaced by Action, so
+several animations can be included by one unit script. For an Action named
+`Walk`, the public functions are `Walk()`, `STOP_Walk()`, and—when Variable
+Speed or Variable Amplitude is enabled—`Walk_INIT()`.
 
-https://www.youtube.com/watch?v=gH5uATTTYB4
-
-7. Export to BOS, LUS (Lua Unit Script) or [LUS Tween format](https://github.com/FluidPlay/TAP/blob/main/scripts/include/springtweener.lua) by clicking the bottom buttons. The script will be created right next to where the current blender file is saved.
-   - For videos showcasing the entire production workflow from a blender model, to animating it, exporting and integrating it in SpringRTS (with the SpringTweener library), check the three videos which start here: https://www.youtube.com/watch?v=W1U3WAbjXss
-
-8. Enjoy!
-
-## Include-ready BOS animation export
-
-**Create BOS Includes (.h)** writes one header per selected Blender Action. Action
-names are converted to BOS identifiers one character at a time: invalid characters
-become underscores and a leading digit receives an underscore prefix. An empty
-name becomes `Walk`. The same normalized name is used in the output filename.
-The Blender scene must run at 30 FPS.
-
-Every generated macro, local variable, and function is namespaced with the Action
-name, so several generated headers can be included by one unit. For an Action named
-`Walk`, the public entry points are `Walk()`, `STOP_Walk()`, and, when unit-speed
-modulation is enabled, `Walk_INIT()`.
-
-Walking animations can sample `CURRENT_SPEED` before every keyframe. The generated
-calculation splits speed correction between cadence and absolute transform
-amplitude while carrying fractional milliseconds forward. Idle and death
-animations instead use a fixed-time calculation and never read unit speed; their
-speed remains configurable through `<Action>_DEFAULT_ANIM_TIME`. Stop-animation
-speed is configurable through `<Action>_STOP_SPEED`.
-
-When Variable Speed is enabled without Variable Amplitude, the smaller
-`<Action>_CALC_DESIRED_FRAMES` path directly derives frame time from
-`MAX_SPEED / (CURRENT_SPEED + 1)`. It uses only `remainder_ms`, `currentTime`, and
-`desiredFrames` locals, with `<Action>_MIN_ANIM_TIME` and
-`<Action>_MAX_ANIM_TIME` as its timing limits. Amplitude-enabled exports use the
-larger `<Action>_CALC_DESIRED_FRAMES_AMPLITUDE` contract instead. Its
-`<Action>_BLEND_PERCENT` setting controls how speed changes are divided between
-animation cadence and transform amplitude: `100` uses cadence only, while `0`
-uses amplitude only. The default is `60`.
-
-A complete owning-script setup looks like this:
+For a speed-dependent walk, the owning unit script needs `isMoving` and
+`maxSpeed` static variables and initializes the generated animation:
 
 ```bos
 #include "constants.h"
@@ -67,7 +58,6 @@ A complete owning-script setup looks like this:
 piece pelvis, thigh;
 static-var isMoving, maxSpeed;
 
-#define Walk_MAX_SPEED_PERCENT 175
 #define Walk_SIGNAL_MASK SIGNAL_MOVE
 #include "myunit_Walk.h"
 
@@ -91,24 +81,18 @@ StopMoving()
 }
 ```
 
-The generated header documents every supported override next to its default. BOS
-headers contain animation code and namespaced configuration only; unit callbacks
-such as `Create`, `StartMoving`, and `StopMoving` remain owned by the including
-script.
+The generated header documents its Action-namespaced configuration macros,
+such as `Walk_SIGNAL_MASK`, `Walk_DEFAULT_ANIM_TIME`, `Walk_STOP_SPEED`, and
+`Walk_MOVESCALE` when Variable Scale is enabled. Do not use the legacy global
+`MOVESCALE`, `SIG_WALK`, or `animSpeed` setup.
 
 ## Recoil GLTF/GLB workflow
 
-For a model imported through the S3O Blender workflow, export GLB with Blender's
-`+Y up` option disabled and add the Scene custom property `s3ocompat=true`.
-SuperSkeletor exports the same `YXZ` BOS/LUS axes for S3O and GLTF models because
-current RecoilEngine versions convert GLTF piece data into engine coordinates
-while loading. Compile the generated BOS normally: do not add `#define GLTF` or
-use BARScriptCompiler's deprecated GLTF axis-remapping flags.
+For an S3O-derived GLTF/GLB model, export GLB with Blender's **+Y Up** option
+disabled and set the Scene custom property `s3ocompat=true`. Enable **glTF
+Workflow** before export to validate those settings and warn about animated
+non-identity local rest rotations. SuperSkeletor uses the same BOS/LUS axes
+for S3O and GLTF models; do not add `#define GLTF` or use deprecated GLTF
+axis-remapping compiler flags.
 
-Enable **glTF Workflow** before exporting scripts to validate these settings. It
-also warns when an animated object or bone has a non-identity local rest rotation;
-that rest frame is intentionally preserved by Recoil and rotates the affected
-piece's local animation axes.
-
-
-![example](cormort.gif)
+![Example animation](cormort.gif)
