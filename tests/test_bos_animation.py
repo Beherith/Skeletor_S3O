@@ -44,6 +44,7 @@ def test_walk_header_is_directly_includeable_and_fully_namespaced():
 	assert "#ifndef Fast_Walk_DEFAULT_ANIM_TIME" in output
 	assert "#ifndef Fast_Walk_MIN_SPEED_PERCENT" in output
 	assert "#ifndef Fast_Walk_MAX_SPEED_PERCENT" in output
+	assert "#ifndef Fast_Walk_BLEND_PERCENT" in output
 	assert "#ifndef Fast_Walk_MOVESCALE" in output
 	assert "#ifndef Fast_Walk_SIGNAL_MASK" in output
 	assert "#ifndef Fast_Walk_FIRST_FRAME_COUNT" in output
@@ -62,11 +63,11 @@ def test_template_comments_and_source_path_are_preserved():
 	assert "These two static-var's MUST be declared in the script that includes this header." in output
 	assert "Times here are specified as milliseconds per frame. So 33 is the default speed." in output
 	assert "Controls the lowest speed percentage for the animation" in output
-	assert "responsible for blending move speeds and and animation amplitude" in output
+	assert "blends cadence and animation amplitude while preserving the resulting ground speed" in output
 	assert "The first frame of the walking animation MUST be done at at most 2x the desired frames." in output
 	assert "COB angular constants being 182" in output
 	assert "Moves have a linear constant of 64K" in output
-	assert "get PRINT (get (GAME_FRAME), Walk_currentPercent" in output
+	assert "get PRINT (get (GAME_FRAME), Walk_speedPercent" in output
 	assert "Call-script this when you want to stop the animation" in output
 	assert r"N:\animations\unit.blend" in output
 	assert "//delta=" not in output
@@ -74,9 +75,12 @@ def test_template_comments_and_source_path_are_preserved():
 
 def test_combined_speed_amplitude_macro_keeps_fractional_time_and_clamps_frames():
 	output = render(variable_speed=True, variable_amplitude=True)
-	assert "Walk_currentPercent = ((100 * get (CURRENT_SPEED)) / maxSpeed - 100);" in output
-	assert "Walk_currentTime = (Walk_DEFAULT_ANIM_TIME * (100 - (Walk_currentPercent / 2))) / 100;" in output
-	assert "Walk_amplitude = 100 + ((Walk_currentPercent * 60) / 100);" in output
+	assert "#define Walk_BLEND_PERCENT 60" in output
+	assert "Walk_speedPercent = (100 * get(CURRENT_SPEED)) / maxSpeed;" in output
+	assert "if (Walk_speedPercent < Walk_MIN_SPEED_PERCENT) Walk_speedPercent = Walk_MIN_SPEED_PERCENT;" in output
+	assert "if (Walk_speedPercent > Walk_MAX_SPEED_PERCENT) Walk_speedPercent = Walk_MAX_SPEED_PERCENT;" in output
+	assert "Walk_amplitude = 100 + (((Walk_speedPercent - 100) * (100 - Walk_BLEND_PERCENT)) / 100);" in output
+	assert "Walk_currentTime = (Walk_DEFAULT_ANIM_TIME * Walk_amplitude) / Walk_speedPercent;" in output
 	assert "Walk_remainder_ms = Walk_currentTime % 33;" in output
 	assert "if (Walk_desiredFrames < 1) Walk_desiredFrames = 1;" in output
 	assignments = re.findall(r"^[ \t]*Walk_desiredFrames = (\d+);", output, re.MULTILINE)
@@ -98,7 +102,7 @@ def test_speed_only_uses_lean_inverse_speed_macro_and_three_locals():
 	assert "Walk_CALC_DESIRED_FRAMES_AMPLITUDE" not in output
 	assert "Walk_MIN_SPEED_PERCENT" not in output
 	assert "Walk_MAX_SPEED_PERCENT" not in output
-	assert "Walk_currentPercent" not in output
+	assert "Walk_speedPercent" not in output
 	assert "Walk_amplitude" not in output
 	local_vars = re.findall(r"^\tvar (Walk_[A-Za-z0-9_]+);", output, re.MULTILINE)
 	assert local_vars == ["Walk_remainder_ms", "Walk_currentTime", "Walk_desiredFrames"]
@@ -141,11 +145,14 @@ def test_stop_speed_override_applies_to_moves_and_turns():
 )
 def test_walk_speed_amplitude_option_matrix(variable_speed, variable_amplitude, uses_current_speed, scales_commands):
 	output = render(variable_speed=variable_speed, variable_amplitude=variable_amplitude)
-	assert ("get (CURRENT_SPEED)" in output) is uses_current_speed
+	reads_current_speed = "get (CURRENT_SPEED)" in output or "get(CURRENT_SPEED)" in output
+	assert reads_current_speed is uses_current_speed
 	commands = "\n".join(line for line in output.splitlines() if line.lstrip().startswith(("move ", "turn ")))
 	assert ("Walk_amplitude" in commands) is scales_commands
 	if variable_amplitude:
 		assert "Walk_CALC_DESIRED_FRAMES_AMPLITUDE()" in output
+		if not variable_speed:
+			assert "Walk_currentTime = Walk_DEFAULT_ANIM_TIME;" in output
 	else:
 		assert "Walk_CALC_DESIRED_FRAMES()" in output
 

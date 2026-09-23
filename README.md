@@ -54,7 +54,10 @@ When Variable Speed is enabled without Variable Amplitude, the smaller
 `MAX_SPEED / (CURRENT_SPEED + 1)`. It uses only `remainder_ms`, `currentTime`, and
 `desiredFrames` locals, with `<Action>_MIN_ANIM_TIME` and
 `<Action>_MAX_ANIM_TIME` as its timing limits. Amplitude-enabled exports use the
-larger `<Action>_CALC_DESIRED_FRAMES_AMPLITUDE` contract instead.
+larger `<Action>_CALC_DESIRED_FRAMES_AMPLITUDE` contract instead. Its
+`<Action>_BLEND_PERCENT` setting controls how speed changes are divided between
+animation cadence and transform amplitude: `100` uses cadence only, while `0`
+uses amplitude only. The default is `60`.
 
 A complete owning-script setup looks like this:
 

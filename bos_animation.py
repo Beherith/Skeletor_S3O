@@ -103,6 +103,11 @@ def _append_common_configuration(lines, namespace, *, is_walk, uses_unit_speed, 
 			"\t#define %s_MAX_SPEED_PERCENT 175" % namespace,
 			"#endif",
 			"",
+			"// Blends cadence and transform amplitude. 100 changes cadence only; 0 changes amplitude only.",
+			"#ifndef %s_BLEND_PERCENT" % namespace,
+			"\t#define %s_BLEND_PERCENT 60" % namespace,
+			"#endif",
+			"",
 		])
 
 	if variable_scale:
@@ -168,26 +173,26 @@ def _append_common_configuration(lines, namespace, *, is_walk, uses_unit_speed, 
 		])
 	elif variable_amplitude:
 		lines.extend([
-			"// The following macro is used only within the script itself, and is responsible for blending move speeds and and animation amplitude",
-			"// Along with keeping track of fractional milliseconds of animation time needed.",
+			"// The following macro blends cadence and animation amplitude while preserving the resulting ground speed.",
+			"// It also keeps track of fractional milliseconds of animation time needed.",
 			"#ifndef %s_CALC_DESIRED_FRAMES_AMPLITUDE" % namespace,
 			"\t#define %s_CALC_DESIRED_FRAMES_AMPLITUDE() \\" % namespace,
-			"\t\t%s_currentPercent = ((100 * get (CURRENT_SPEED)) / maxSpeed - 100); \\" % namespace,
-			"\t\tif (%s_currentPercent < %s_MIN_SPEED_PERCENT - 100) %s_currentPercent = %s_MIN_SPEED_PERCENT - 100; \\" % (namespace, namespace, namespace, namespace),
-			"\t\tif (%s_currentPercent > %s_MAX_SPEED_PERCENT - 100) %s_currentPercent = %s_MAX_SPEED_PERCENT - 100; \\" % (namespace, namespace, namespace, namespace),
+			"\t\t%s_speedPercent = (100 * get(CURRENT_SPEED)) / maxSpeed; \\" % namespace,
+			"\t\tif (%s_speedPercent < %s_MIN_SPEED_PERCENT) %s_speedPercent = %s_MIN_SPEED_PERCENT; \\" % (namespace, namespace, namespace, namespace),
+			"\t\tif (%s_speedPercent > %s_MAX_SPEED_PERCENT) %s_speedPercent = %s_MAX_SPEED_PERCENT; \\" % (namespace, namespace, namespace, namespace),
+			"\t\t%s_amplitude = 100 + (((%s_speedPercent - 100) * (100 - %s_BLEND_PERCENT)) / 100); \\" % (namespace, namespace, namespace),
 		])
 		if variable_speed:
-			lines.append("\t\t%s_currentTime = (%s_DEFAULT_ANIM_TIME * (100 - (%s_currentPercent / 2))) / 100; \\" % (namespace, namespace, namespace))
+			lines.append("\t\t%s_currentTime = (%s_DEFAULT_ANIM_TIME * %s_amplitude) / %s_speedPercent; \\" % (namespace, namespace, namespace, namespace))
 		else:
 			lines.append("\t\t%s_currentTime = %s_DEFAULT_ANIM_TIME; \\" % (namespace, namespace))
-		lines.append("\t\t%s_amplitude = 100 + ((%s_currentPercent * 60) / 100); \\" % (namespace, namespace))
 		lines.extend([
 			"\t\t%s_currentTime = %s_desiredFrames * %s_currentTime + %s_remainder_ms; \\" % (namespace, namespace, namespace, namespace),
 			"\t\t%s_remainder_ms = %s_currentTime %% 33; \\" % (namespace, namespace),
 			"\t\t%s_desiredFrames = %s_currentTime / 33; \\" % (namespace, namespace),
 			"\t\tif (%s_desiredFrames < 1) %s_desiredFrames = 1;" % (namespace, namespace),
 			"#endif",
-			"//get PRINT (get (GAME_FRAME), %s_currentPercent, %s_currentTime, %s_amplitude);" % (namespace, namespace, namespace),
+			"//get PRINT (get (GAME_FRAME), %s_speedPercent, %s_currentTime, %s_amplitude);" % (namespace, namespace, namespace),
 			"",
 		])
 	else:
@@ -382,7 +387,7 @@ def render_bos_animation(
 		"\tvar %s_currentTime;" % namespace,
 	])
 	if variable_amplitude:
-		lines.append("\tvar %s_currentPercent;" % namespace)
+		lines.append("\tvar %s_speedPercent;" % namespace)
 	lines.append("\tvar %s_desiredFrames;" % namespace)
 	if variable_amplitude:
 		lines.append("\tvar %s_amplitude; // Always expressed in percent." % namespace)
