@@ -1,63 +1,63 @@
 **By Beherith**
 
-[[https://www.beyondallreason.info/]{.underline}](https://www.beyondallreason.info/)
+[https://www.beyondallreason.info/](https://www.beyondallreason.info/)
 
-[[https://github.com/Beherith/Skeletor_S3O]{.underline}](https://github.com/Beherith/Skeletor_S3O)
+[https://github.com/Beherith/Skeletor_S3O](https://github.com/Beherith/Skeletor_S3O)
 
 Table of contents:
 
 ![](images/media/image6.gif)
 
-[[Requirements]{.underline}](#requirements)
+[Requirements](#requirements)
 
-[[Setting up S3O's in
-UpSpring]{.underline}](#setting-up-s3os-in-upspring)
+[Setting up S3O's in
+UpSpring](#setting-up-s3os-in-upspring)
 
-[[Skeleton and Inverse
-Kinematics]{.underline}](#skeleton-and-inverse-kinematics)
+[Skeleton and Inverse
+Kinematics](#skeleton-and-inverse-kinematics)
 
-> [[Checking the created bones/inverse
-> kinematics]{.underline}](#checking-the-created-bonesinverse-kinematics)
+> [Checking the created bones/inverse
+> kinematics](#checking-the-created-bonesinverse-kinematics)
 >
-> [[Stiffening joints]{.underline}](#stiffening-joints)
+> [Stiffening joints](#stiffening-joints)
 >
-> [[Choosing Actions to export]{.underline}](#choosing-actions-to-export)
+> [Choosing Actions to export](#choosing-actions-to-export)
 
-[[Animation]{.underline}](#animation)
+[Animation](#animation)
 
-> [[Walk Animations]{.underline}](#walk-animations)
+> [Walk Animations](#walk-animations)
 >
-> [[Example Walk Animation]{.underline}](#example-walk-animation)
+> [Example Walk Animation](#example-walk-animation)
 >
-> [[Useful hotkeys]{.underline}](#useful-hotkeys)
+> [Useful hotkeys](#useful-hotkeys)
 >
-> [[General workflow]{.underline}](#general-workflow)
+> [General workflow](#general-workflow)
 >
-> [[Idle animations]{.underline}](#idle-animations)
+> [Idle animations](#idle-animations)
 >
-> [[Death animations NEW!]{.underline}](#death-animations-new)
+> [Death animations NEW!](#death-animations-new)
 >
-> [[Starting position - Power
-> Stance!]{.underline}](#starting-position---power-stance)
+> [Starting position - Power
+> Stance!](#starting-position---power-stance)
 >
-> [[Exporting death animations and
-> wrecks]{.underline}](#exporting-death-animations-and-wrecks)
+> [Exporting death animations and
+> wrecks](#exporting-death-animations-and-wrecks)
 
-[[Avoiding Gimbal Lock]{.underline}](#avoiding-gimbal-lock)
+[Avoiding Gimbal Lock](#avoiding-gimbal-lock)
 
-[[Exporting actions]{.underline}](#exporting-actions)
+[Exporting actions](#exporting-actions)
 
-> [[BOS includes and integration]{.underline}](#bos-includes-and-integration)
+> [BOS includes and integration](#bos-includes-and-integration)
 >
-> [[Other export targets]{.underline}](#other-export-targets)
+> [Other export targets](#other-export-targets)
 >
-> [[Modern model workflows]{.underline}](#modern-model-workflows)
+> [Modern model workflows](#modern-model-workflows)
 
-[[Troubleshooting]{.underline}](#troubleshooting)
+[Troubleshooting](#troubleshooting)
 
-> [[BOS export did not produce a header]{.underline}](#bos-export-did-not-produce-a-header)
+> [BOS export did not produce a header](#bos-export-did-not-produce-a-header)
 
-[[Youtube Sources]{.underline}](#youtube-sources)
+[Youtube Sources](#youtube-sources)
 
 # Requirements
 
@@ -66,7 +66,7 @@ Kinematics]{.underline}](#skeleton-and-inverse-kinematics)
     releases should be tested with the model pipeline before production use.
 
 2.  The current SuperSkeletor add-on from:
-    [[https://github.com/Beherith/Skeletor_S3O]{.underline}](https://github.com/Beherith/Skeletor_S3O)
+    [https://github.com/Beherith/Skeletor_S3O](https://github.com/Beherith/Skeletor_S3O)
 
 3.  Enable **SuperSkeletor** in Blender's Add-ons preferences. When
     installing from source, keep `SuperSkeletor.py` and `bos_animation.py`
@@ -111,7 +111,7 @@ Use the current control names quoted in the text: the panel is called
 
 Familiarize yourself with the way things are set up with the example
 corshiva blend file in the repo
-([[https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend]{.underline}](https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend)
+([https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend](https://github.com/Beherith/Skeletor_S3O/blob/master/corshiva_anim_v5_bos_out.blend)
 )
 
 Enable **SuperSkeletor** in Blender's Add-ons preferences. The old
@@ -144,10 +144,10 @@ Spend 10 minutes watching these two videos, they give a better rundown
 of IK than I ever could.
 
 Basic Bones and rigging:
-[[https://www.youtube.com/watch?v=cp1YRaTZBfw]{.underline}](https://www.youtube.com/watch?v=cp1YRaTZBfw)
+[https://www.youtube.com/watch?v=cp1YRaTZBfw](https://www.youtube.com/watch?v=cp1YRaTZBfw)
 
 Basic inverse kinematics:
-[[https://www.youtube.com/watch?v=gH5uATTTYB4]{.underline}](https://www.youtube.com/watch?v=gH5uATTTYB4)
+[https://www.youtube.com/watch?v=gH5uATTTYB4](https://www.youtube.com/watch?v=gH5uATTTYB4)
 
 ![](images/media/image24.png)
 
@@ -251,13 +251,13 @@ traverse forward 24\*1.61 elmos in a cycle.
 
 8 Frame walk cycle, recommend starting from High-Point
 
-[[https://sites.google.com/site/disasterbot0101/game-design/12\-\--animated-walk-cycle\-\--50pts]{.underline}](https://sites.google.com/site/disasterbot0101/game-design/12---animated-walk-cycle---50pts)
+[https://sites.google.com/site/disasterbot0101/game-design/12\-\--animated-walk-cycle\-\--50pts](https://sites.google.com/site/disasterbot0101/game-design/12---animated-walk-cycle---50pts)
 
 ![](images/media/image21.png)
 
 ![](images/media/image11.png)
 
-[[https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo]{.underline}](https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo)
+[https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo](https://www.youtube.com/watch?time_continue=4&v=GlYTXs0Cyc8&feature=emb_logo)
 
 I recommend using the Dope sheet in blender to do your animations:
 
@@ -316,7 +316,7 @@ the bone selected on the Item panel in the 3D view.
 
 You only have to animate the left or right side of the body, you can
 mirror a walk cycle to the other half of a skeleton:
-[[https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle]{.underline}](https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle)
+[https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle](https://blender.stackexchange.com/questions/43720/how-to-mirror-a-walk-cycle)
 
 On the Dope sheet, select all the keyframes of the animation.
 
@@ -558,18 +558,18 @@ Full Reaminate workflow in Blender on the example of corstorm:
 walk cycle animation blueprint: a how to guide \[8min\], use \<\> (,.)
 keys to view frame by frame :)
 
-[[https://youtu.be/GlYTXs0Cyc8?t=13]{.underline}](https://youtu.be/GlYTXs0Cyc8?t=13)
+[https://youtu.be/GlYTXs0Cyc8?t=13](https://youtu.be/GlYTXs0Cyc8?t=13)
 
 Basic Bones and rigging:
 
-[[https://www.youtube.com/watch?v=cp1YRaTZBfw]{.underline}](https://www.youtube.com/watch?v=cp1YRaTZBfw)
+[https://www.youtube.com/watch?v=cp1YRaTZBfw](https://www.youtube.com/watch?v=cp1YRaTZBfw)
 
 Basic inverse kinematics:
 
-[[https://www.youtube.com/watch?v=gH5uATTTYB4]{.underline}](https://www.youtube.com/watch?v=gH5uATTTYB4)
+[https://www.youtube.com/watch?v=gH5uATTTYB4](https://www.youtube.com/watch?v=gH5uATTTYB4)
 
 Other:
 
 Blender Python Tutorial: An Introduction to Scripting \[Python - bpy\]
 
-[[https://www.youtube.com/watch?v=cyt0O7saU4Q]{.underline}](https://www.youtube.com/watch?v=cyt0O7saU4Q)
+[https://www.youtube.com/watch?v=cyt0O7saU4Q](https://www.youtube.com/watch?v=cyt0O7saU4Q)
